@@ -184,7 +184,7 @@ public final class Config {
 
     public static final Property<String> PROPERTY_SCALE_READER_GROUP = Property.named(
             "scale.request.readerGroup.name", "scaleGroup", "scale.ReaderGroup");
-
+    
     public static final String COMPONENT_CODE = "controller";
 
     //endregion
