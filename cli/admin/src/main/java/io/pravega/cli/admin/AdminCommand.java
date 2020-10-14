@@ -28,6 +28,7 @@ import io.pravega.cli.admin.controller.ControllerDescribeStreamCommand;
 import io.pravega.cli.admin.controller.ControllerListReaderGroupsInScopeCommand;
 import io.pravega.cli.admin.controller.ControllerListScopesCommand;
 import io.pravega.cli.admin.controller.ControllerListStreamsInScopeCommand;
+import io.pravega.cli.admin.disasterRecovery.StorageListSegmentsCommand;
 import io.pravega.cli.admin.password.PasswordFileCreatorCommand;
 import io.pravega.cli.admin.cluster.GetClusterNodesCommand;
 import io.pravega.cli.admin.cluster.GetSegmentStoreByContainerCommand;
@@ -36,6 +37,7 @@ import io.pravega.cli.admin.config.ConfigListCommand;
 import io.pravega.cli.admin.config.ConfigSetCommand;
 import io.pravega.cli.admin.utils.CLIControllerConfig;
 import io.pravega.common.Exceptions;
+import io.pravega.segmentstore.server.store.ServiceBuilderConfig;
 import io.pravega.segmentstore.server.store.ServiceConfig;
 import java.io.PrintStream;
 import java.util.ArrayList;
@@ -107,6 +109,10 @@ public abstract class AdminCommand {
         return getCommandArgs().getState().getConfigBuilder().build().getConfig(ServiceConfig::builder);
     }
 
+    protected ServiceBuilderConfig getServiceBuilderConfig() {
+        return getCommandArgs().getState().getConfigBuilder().build();
+    }
+
     /**
      * Creates a new instance of the CLIControllerConfig class from the shared AdminCommandState passed in via the Constructor.
      */
@@ -154,6 +160,9 @@ public abstract class AdminCommand {
     //endregion
 
     //region Arguments
+    protected int getArgCount() {
+        return this.commandArgs.getArgs().size();
+    }
 
     protected void ensureArgCount(int expectedCount) {
         Preconditions.checkArgument(this.commandArgs.getArgs().size() == expectedCount, "Incorrect argument count.");
@@ -232,6 +241,7 @@ public abstract class AdminCommand {
                         .put(ListContainersCommand::descriptor, ListContainersCommand::new)
                         .put(GetSegmentStoreByContainerCommand::descriptor, GetSegmentStoreByContainerCommand::new)
                         .put(PasswordFileCreatorCommand::descriptor, PasswordFileCreatorCommand::new)
+                        .put(StorageListSegmentsCommand::descriptor, StorageListSegmentsCommand::new)
                         .build());
 
         /**

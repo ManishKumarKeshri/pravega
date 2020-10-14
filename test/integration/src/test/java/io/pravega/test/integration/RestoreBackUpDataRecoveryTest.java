@@ -492,7 +492,7 @@ public class RestoreBackUpDataRecoveryTest extends ThreadPooledTestSuite {
         createBookKeeperLogFactory(pravegaRunner);
         log.info("Started a new BookKeeper and ZooKeeper.");
 
-        // Recover segments
+        // Recover segmentsc
         runRecovery(containerCount, storage);
 
         // Start a new segment store and controller
