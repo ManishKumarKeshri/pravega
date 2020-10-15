@@ -32,6 +32,9 @@ import io.pravega.segmentstore.contracts.StreamSegmentStore;
 import io.pravega.segmentstore.server.host.handler.PravegaConnectionListener;
 import io.pravega.segmentstore.server.store.ServiceBuilder;
 import io.pravega.segmentstore.server.store.ServiceBuilderConfig;
+import io.pravega.segmentstore.storage.StorageFactory;
+import io.pravega.storage.filesystem.FileSystemStorageConfig;
+import io.pravega.storage.filesystem.FileSystemStorageFactory;
 import io.pravega.test.common.TestUtils;
 import io.pravega.test.common.TestingServerStarter;
 import io.pravega.test.integration.demo.ControllerWrapper;
@@ -57,8 +60,8 @@ public final class SetupUtils {
     private ScheduledExecutorService executor = null;
     @Getter
     private Controller controller = null;
+    @Getter
     private ServiceBuilder serviceBuilder = null;
-    private StreamSegmentStore streamSegmentStore = null;
     @Getter
     private EventStreamClientFactory clientFactory = null;
     private ControllerWrapper controllerWrapper = null;
@@ -108,11 +111,16 @@ public final class SetupUtils {
         this.zkTestServer.start();
 
         // Start Pravega Service.
-        this.serviceBuilder = ServiceBuilder.newInMemoryBuilder(ServiceBuilderConfig.getDefaultConfig());
+        FileSystemStorageConfig fileSystemStorageConfig = FileSystemStorageConfig
+                .builder()
+                .build();
+        StorageFactory storageFactory = new FileSystemStorageFactory(fileSystemStorageConfig, executor);
+        this.serviceBuilder = ServiceBuilder.newInMemoryBuilder(ServiceBuilderConfig.getDefaultConfig())
+                .withStorageFactory(setup -> storageFactory);
 
-        this.serviceBuilder.initialize();
-        this.streamSegmentStore = this.serviceBuilder.createStreamSegmentService();
-        this.server = new PravegaConnectionListener(false, servicePort, this.streamSegmentStore , this.serviceBuilder.createTableStoreService(),
+        serviceBuilder.initialize();
+        StreamSegmentStore store = this.serviceBuilder.createStreamSegmentService();
+        this.server = new PravegaConnectionListener(false, servicePort, store, this.serviceBuilder.createTableStoreService(),
                 this.serviceBuilder.getLowPriorityExecutor());
         this.server.startListening();
         log.info("Started Pravega Service");
@@ -167,12 +175,6 @@ public final class SetupUtils {
         log.info("Created stream: " + streamName);
     }
 
-    public void flushEverything() {
-        StreamSegmentStore store = this.streamSegmentStore;
-        ServiceBuilder.ComponentSetup componentSetup = new ServiceBuilder.ComponentSetup(this.serviceBuilder);
-        int containerCount = componentSetup.getContainerRegistry().getContainerCount();
-        componentSetup.getContainerRegistry().getContainer(0).f
-    }
     /**
      * Create a stream writer for writing Integer events.
      *

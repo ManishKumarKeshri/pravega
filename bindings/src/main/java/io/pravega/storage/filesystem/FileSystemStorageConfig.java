@@ -23,7 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 public class FileSystemStorageConfig {
     //region Config Names
 
-    public static final Property<String> ROOT = Property.named("root", "/fs/");
+    public static final Property<String> ROOT = Property.named("root", "/test_fs/");
     public static final Property<Boolean> REPLACE_ENABLED = Property.named("replace.enable", false);
     public static final String COMPONENT_CODE = "filesystem";
 
