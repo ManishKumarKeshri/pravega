@@ -57,6 +57,8 @@ public final class SetupUtils {
     private ScheduledExecutorService executor = null;
     @Getter
     private Controller controller = null;
+    private ServiceBuilder serviceBuilder = null;
+    private StreamSegmentStore streamSegmentStore = null;
     @Getter
     private EventStreamClientFactory clientFactory = null;
     private ControllerWrapper controllerWrapper = null;
@@ -75,7 +77,7 @@ public final class SetupUtils {
     @Getter
     private final int servicePort = TestUtils.getAvailableListenPort();
     private final ClientConfig clientConfig = ClientConfig.builder().controllerURI(URI.create("tcp://localhost:" + controllerRPCPort)).build();
-    
+
     /**
      * Start all pravega related services required for the test deployment.
      *
@@ -106,12 +108,12 @@ public final class SetupUtils {
         this.zkTestServer.start();
 
         // Start Pravega Service.
-        ServiceBuilder serviceBuilder = ServiceBuilder.newInMemoryBuilder(ServiceBuilderConfig.getDefaultConfig());
+        this.serviceBuilder = ServiceBuilder.newInMemoryBuilder(ServiceBuilderConfig.getDefaultConfig());
 
-        serviceBuilder.initialize();
-        StreamSegmentStore store = serviceBuilder.createStreamSegmentService();
-        this.server = new PravegaConnectionListener(false, servicePort, store, serviceBuilder.createTableStoreService(),
-                serviceBuilder.getLowPriorityExecutor());
+        this.serviceBuilder.initialize();
+        this.streamSegmentStore = this.serviceBuilder.createStreamSegmentService();
+        this.server = new PravegaConnectionListener(false, servicePort, this.streamSegmentStore , this.serviceBuilder.createTableStoreService(),
+                this.serviceBuilder.getLowPriorityExecutor());
         this.server.startListening();
         log.info("Started Pravega Service");
 
@@ -165,6 +167,12 @@ public final class SetupUtils {
         log.info("Created stream: " + streamName);
     }
 
+    public void flushEverything() {
+        StreamSegmentStore store = this.streamSegmentStore;
+        ServiceBuilder.ComponentSetup componentSetup = new ServiceBuilder.ComponentSetup(this.serviceBuilder);
+        int containerCount = componentSetup.getContainerRegistry().getContainerCount();
+        componentSetup.getContainerRegistry().getContainer(0).f
+    }
     /**
      * Create a stream writer for writing Integer events.
      *
