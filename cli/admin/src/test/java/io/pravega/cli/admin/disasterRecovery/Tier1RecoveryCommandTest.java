@@ -61,11 +61,15 @@ public class Tier1RecoveryCommandTest extends BookKeeperClusterTestCase {
     private static final Duration READ_TIMEOUT = Duration.ofMillis(1000);
 
     public Tier1RecoveryCommandTest() {
-        super(1);
+        super(3);
     }
 
     @Before
     public void setUp() throws Exception {
+        baseConf.setLedgerManagerFactoryClassName("org.apache.bookkeeper.meta.FlatLedgerManagerFactory");
+        baseClientConf.setLedgerManagerFactoryClassName("org.apache.bookkeeper.meta.FlatLedgerManagerFactory");
+        super.setUp();
+
         this.executor = ExecutorServiceHelpers.newScheduledThreadPool(2, "storage pool");
         this.baseDir = Files.createTempDirectory("test_hdfs").toFile().getAbsoluteFile();
         this.adapterConfig = FileSystemStorageConfig.builder()

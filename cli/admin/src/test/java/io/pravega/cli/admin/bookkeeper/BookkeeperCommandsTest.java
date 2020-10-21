@@ -21,6 +21,7 @@ import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperConfig;
 import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperLogFactory;
 import io.pravega.test.common.AssertExtensions;
 import lombok.Cleanup;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
@@ -46,6 +47,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Test basic functionality of Bookkeeper commands.
  */
+@Slf4j
 public class BookkeeperCommandsTest extends BookKeeperClusterTestCase {
 
     private static final AtomicReference<AdminCommandState> STATE = new AtomicReference<>();
@@ -67,6 +69,7 @@ public class BookkeeperCommandsTest extends BookKeeperClusterTestCase {
         Properties bkProperties = new Properties();
         bkProperties.setProperty("pravegaservice.container.count", "4");
         bkProperties.setProperty("pravegaservice.zk.connect.uri", zkUtil.getZooKeeperConnectString());
+        log.info("zk connect uri = {}", zkUtil.getZooKeeperConnectString());
         bkProperties.setProperty("bookkeeper.ledger.path", "/ledgers");
         bkProperties.setProperty("bookkeeper.zk.metadata.path", "ledgers");
         bkProperties.setProperty("pravegaservice.clusterName", "");
