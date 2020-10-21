@@ -57,6 +57,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
@@ -65,6 +66,7 @@ import org.apache.curator.retry.ExponentialBackoffRetry;
 /**
  * Base class for any command to execute from the Admin tool.
  */
+@Slf4j
 public abstract class AdminCommand {
     //region Private
 
@@ -126,6 +128,8 @@ public abstract class AdminCommand {
      */
     protected CuratorFramework createZKClient() {
         val serviceConfig = getServiceConfig();
+        log.info("cluster name = {}", serviceConfig.getClusterName());
+        log.info("zk connection = {}", serviceConfig.getZkURL());
         CuratorFramework zkClient = CuratorFrameworkFactory
                 .builder()
                 .connectString(serviceConfig.getZkURL())

@@ -100,7 +100,7 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
 
         @Cleanup
         val zkClient = createZKClient();
-        log.info("Created a new zookeeper client to {}.", zkClient.getState().name());
+        log.info("Created a new zookeeper client to {}.", getServiceConfig().getZkURL());
 
         @Cleanup
         val dataLogFactory = new BookKeeperLogFactory(bkConfig, zkClient, executorService);
