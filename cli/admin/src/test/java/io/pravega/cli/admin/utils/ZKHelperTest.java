@@ -19,7 +19,7 @@ public class ZKHelperTest {
     public void testFaultyZKScenario() throws Exception {
         AssertExtensions.assertThrows(ZKConnectionFailedException.class, () -> ZKHelper.create("wrongURL:1234", "wrongCluster"));
         SetupUtils setupUtils = new SetupUtils();
-        setupUtils.startAllServices();
+        setupUtils.startAllServices(null);
         ZKHelper zkHelper = ZKHelper.create(setupUtils.getZkTestServer().getConnectString(), "pravega");
         // Now, stop all services.
         setupUtils.stopAllServices();
