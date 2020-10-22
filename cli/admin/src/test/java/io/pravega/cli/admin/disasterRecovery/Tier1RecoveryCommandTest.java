@@ -220,7 +220,7 @@ public class Tier1RecoveryCommandTest {
         public String logMetaNamespace;
         public String baseNamespace;
         BookKeeperRunner(int instanceId, int bookieCount) throws Exception {
-            ledgerPath = "/pravega-cluster/bookkeeper/ledgers";
+            ledgerPath = "/pravega/bookkeeper/ledgers";
             bkPort = io.pravega.test.common.TestUtils.getAvailableListenPort();
             val bookiePorts = new ArrayList<Integer>();
             for (int i = 0; i < bookieCount; i++) {
@@ -242,7 +242,7 @@ public class Tier1RecoveryCommandTest {
             bkService.set(this.bookKeeperServiceRunner);
 
             // Create a ZKClient with a unique namespace.
-            baseNamespace = "pravega/" + instanceId + "_" + Long.toHexString(System.nanoTime());
+            baseNamespace = "pravega";
             this.zkClient.set(CuratorFrameworkFactory
                     .builder()
                     .connectString("localhost:" + bkPort)
@@ -252,7 +252,7 @@ public class Tier1RecoveryCommandTest {
 
             this.zkClient.get().start();
 
-            logMetaNamespace = "segmentstore/containers" + instanceId;
+            logMetaNamespace = "segmentstore/containers";
             this.bkConfig.set(BookKeeperConfig
                     .builder()
                     .with(BookKeeperConfig.ZK_ADDRESS, "localhost:" + bkPort)

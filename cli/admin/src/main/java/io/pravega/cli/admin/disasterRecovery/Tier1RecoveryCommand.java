@@ -95,7 +95,9 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         log.info("Loaded {} Storage.", getServiceConfig().getStorageImplementation().toString());
 
         val bkConfig = getCommandArgs().getState().getConfigBuilder()
-                .include(BookKeeperConfig.builder().with(BookKeeperConfig.ZK_ADDRESS, getServiceConfig().getZkURL()))
+                .include(BookKeeperConfig.builder().with(BookKeeperConfig.ZK_ADDRESS, getServiceConfig().getZkURL())
+                        .with(BookKeeperConfig.ZK_METADATA_PATH, "segmentstore/containers")
+                        .with(BookKeeperConfig.BK_LEDGER_PATH, "/pravega/bookkeeper/ledgers"))
                 .build().getConfig(BookKeeperConfig::builder);
 
         @Cleanup
@@ -120,6 +122,10 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         ContainerContext context = createContainerContext(executorService);
         Map<Integer, DebugStreamSegmentContainer> debugStreamSegmentContainerMap = getContainers(context, this.containerCount, dataLogFactory,
                 this.storageFactory);
+
+        for (int containerId = 0; containerId < containerCount; containerId++) {
+            ContainerRecoveryUtils.deleteMetadataAndAttributeSegments(storage, containerId).join();
+        }
 
         log.info("Recovering all segments...");
         ContainerRecoveryUtils.recoverAllSegments(storage, debugStreamSegmentContainerMap, executorService);
@@ -258,7 +264,6 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         @Override
         public void close() {
             this.readIndexFactory.close();
-            this.dataLogFactory.close();
             this.cacheManager.close();
             this.cacheStorage.close();
         }
