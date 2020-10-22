@@ -94,45 +94,37 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         storage.initialize(CONTAINER_EPOCH);
         log.info("Loaded {} Storage.", getServiceConfig().getStorageImplementation().toString());
 
+        val serviceConfig = getServiceConfig();
         val bkConfig = getCommandArgs().getState().getConfigBuilder()
-                .include(BookKeeperConfig.builder().with(BookKeeperConfig.ZK_ADDRESS, getServiceConfig().getZkURL())
-                        .with(BookKeeperConfig.ZK_METADATA_PATH, "segmentstore/containers")
-                        .with(BookKeeperConfig.BK_LEDGER_PATH, "/pravega/bookkeeper/ledgers"))
+                .include(BookKeeperConfig.builder().with(BookKeeperConfig.ZK_ADDRESS, serviceConfig.getZkURL()))
                 .build().getConfig(BookKeeperConfig::builder);
-
-        @Cleanup
         val zkClient = createZKClient();
-        log.info("Created a new zookeeper client to {}.", getServiceConfig().getZkURL());
-
-        @Cleanup
-        val dataLogFactory = new BookKeeperLogFactory(bkConfig, zkClient, executorService);
+        val factory = new BookKeeperLogFactory(bkConfig, zkClient, getCommandArgs().getState().getExecutor());
         try {
-            dataLogFactory.initialize();
-            log.debug("BookKeeper Log factory initialized.");
-        } catch (DurableDataLogException e) {
-            log.error("Error initialising BookKeeper Log Factory.");
+            factory.initialize();
+        } catch (DurableDataLogException ex) {
             zkClient.close();
-            throw e;
+            throw ex;
         }
 
         log.info("Starting recovery...");
-        Map<Integer, String> backUpMetadataSegments = getBackUpMetadataSegments(storage, this.containerCount, executorService);
-
-        @Cleanup
-        ContainerContext context = createContainerContext(executorService);
-        Map<Integer, DebugStreamSegmentContainer> debugStreamSegmentContainerMap = getContainers(context, this.containerCount, dataLogFactory,
-                this.storageFactory);
+        // Map<Integer, String> backUpMetadataSegments = getBackUpMetadataSegments(storage, this.containerCount, executorService);
 
         for (int containerId = 0; containerId < containerCount; containerId++) {
             ContainerRecoveryUtils.deleteMetadataAndAttributeSegments(storage, containerId).join();
         }
+
+        @Cleanup
+        ContainerContext context = createContainerContext(executorService);
+        Map<Integer, DebugStreamSegmentContainer> debugStreamSegmentContainerMap = getContainers(context, this.containerCount, factory,
+                this.storageFactory);
 
         log.info("Recovering all segments...");
         ContainerRecoveryUtils.recoverAllSegments(storage, debugStreamSegmentContainerMap, executorService);
         log.info("All segments recovered.");
 
         // Update core attributes from the backUp Metadata segments
-        ContainerRecoveryUtils.updateCoreAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService);
+        // ContainerRecoveryUtils.updateCoreAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService);
 
         // Waits for metadata segments to be flushed to LTS and then stops the debug segment containers
         stopDebugSegmentContainersPostFlush(debugStreamSegmentContainerMap);

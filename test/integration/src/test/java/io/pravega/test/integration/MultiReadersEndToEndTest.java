@@ -66,7 +66,7 @@ public class MultiReadersEndToEndTest {
 
     @BeforeClass
     public static void setup() throws Exception {
-        SETUP_UTILS.startAllServices();
+        SETUP_UTILS.startAllServices(null);
     }
 
     @AfterClass

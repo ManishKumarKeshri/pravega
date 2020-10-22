@@ -92,7 +92,7 @@ public class ControllerRestApiTest {
 
     @BeforeClass
     public static void setup() throws Exception {
-        SETUP_UTILS.startAllServices();
+        SETUP_UTILS.startAllServices(null);
     }
 
     @AfterClass

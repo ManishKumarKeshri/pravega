@@ -27,7 +27,7 @@ public class SingleThreadEndToEndTest {
     public void testReadWrite() throws Exception {
         @Cleanup("stopAllServices")
         SetupUtils setupUtils = new SetupUtils();
-        setupUtils.startAllServices(1);
+        setupUtils.startAllServices(1, null);
         setupUtils.createTestStream("stream", 1);
         @Cleanup
         EventStreamWriter<Integer> writer = setupUtils.getIntegerWriter("stream");

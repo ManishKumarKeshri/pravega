@@ -98,7 +98,7 @@ public class ContainerRecoveryUtils {
             val currentSegment = segmentIterator.next();
 
             // skip recovery if the segment is an attribute segment.
-            if (NameUtils.isAttributeSegment(currentSegment.getName())) {
+            if (NameUtils.isAttributeSegment(currentSegment.getName()) || NameUtils.isMetadataSegment(currentSegment.getName())) {
                 continue;
             }
 

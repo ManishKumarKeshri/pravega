@@ -214,6 +214,10 @@ public final class NameUtils {
         return segmentName.endsWith(ATTRIBUTE_SUFFIX);
     }
 
+    public static boolean isMetadataSegment(String segmentName) {
+        return segmentName.startsWith("_system/containers/metadata_");
+    }
+
     /**
      * Gets the name of the meta-Segment mapped to the given Segment Name that is responsible with storing extended attributes.
      *
