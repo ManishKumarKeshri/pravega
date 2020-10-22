@@ -215,7 +215,7 @@ public final class NameUtils {
     }
 
     public static boolean isMetadataSegment(String segmentName) {
-        return segmentName.startsWith("_system/containers/metadata_");
+        return segmentName.equals("_system/containers/metadata_0");
     }
 
     /**

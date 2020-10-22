@@ -96,7 +96,9 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
 
         val serviceConfig = getServiceConfig();
         val bkConfig = getCommandArgs().getState().getConfigBuilder()
-                .include(BookKeeperConfig.builder().with(BookKeeperConfig.ZK_ADDRESS, serviceConfig.getZkURL()))
+                .include(BookKeeperConfig.builder().with(BookKeeperConfig.ZK_ADDRESS, serviceConfig.getZkURL())
+                        .with(BookKeeperConfig.ZK_METADATA_PATH, "segmentstore/containers")
+                        .with(BookKeeperConfig.BK_LEDGER_PATH, "/pravega/bookkeeper/ledgers"))
                 .build().getConfig(BookKeeperConfig::builder);
         val zkClient = createZKClient();
         val factory = new BookKeeperLogFactory(bkConfig, zkClient, getCommandArgs().getState().getExecutor());
@@ -108,7 +110,7 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         }
 
         log.info("Starting recovery...");
-        // Map<Integer, String> backUpMetadataSegments = getBackUpMetadataSegments(storage, this.containerCount, executorService);
+        Map<Integer, String> backUpMetadataSegments = getBackUpMetadataSegments(storage, this.containerCount, executorService);
 
         for (int containerId = 0; containerId < containerCount; containerId++) {
             ContainerRecoveryUtils.deleteMetadataAndAttributeSegments(storage, containerId).join();
@@ -124,7 +126,7 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         log.info("All segments recovered.");
 
         // Update core attributes from the backUp Metadata segments
-        // ContainerRecoveryUtils.updateCoreAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService);
+        ContainerRecoveryUtils.updateCoreAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService);
 
         // Waits for metadata segments to be flushed to LTS and then stops the debug segment containers
         stopDebugSegmentContainersPostFlush(debugStreamSegmentContainerMap);

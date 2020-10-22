@@ -31,6 +31,7 @@ import io.pravega.segmentstore.server.host.handler.PravegaConnectionListener;
 import io.pravega.segmentstore.server.store.ServiceBuilder;
 import io.pravega.segmentstore.server.store.ServiceBuilderConfig;
 import io.pravega.segmentstore.server.store.ServiceConfig;
+import io.pravega.segmentstore.server.writer.WriterConfig;
 import io.pravega.segmentstore.storage.DurableDataLogException;
 import io.pravega.segmentstore.storage.StorageFactory;
 import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperConfig;
@@ -82,7 +83,7 @@ public class Tier1RecoveryCommandTest {
     protected static final AtomicReference<AdminCommandState> STATE = new AtomicReference<>();
 
     @Rule
-    public final Timeout globalTimeout = new Timeout(600, TimeUnit.SECONDS);
+    public final Timeout globalTimeout = new Timeout(100, TimeUnit.SECONDS);
     private static final Duration READ_TIMEOUT = Duration.ofMillis(1000);
 
 
@@ -158,7 +159,9 @@ public class Tier1RecoveryCommandTest {
 
         String commandResult = TestUtils.executeCommand("storage Tier1-recovery ./build", STATE.get());
         // Start a new segment store and controller
+        log.info("Recovery complete.");
         pravegaRunner.restartControllerAndSegmentStore(this.storageFactory, null);
+        log.info("Started a controller and segment store.");
         // Create the client with new controller.
         try (val clientRunner = new ClientRunner(pravegaRunner.controllerRunner)) {
             // Try reading all events again to verify that the recovery was successful.
@@ -295,7 +298,11 @@ public class Tier1RecoveryCommandTest {
             ServiceBuilderConfig.Builder configBuilder = ServiceBuilderConfig
                     .builder()
                     .include(ServiceConfig.builder()
-                            .with(ServiceConfig.CONTAINER_COUNT, containerCount));
+                            .with(ServiceConfig.CONTAINER_COUNT, containerCount))
+                    .include(WriterConfig.builder()
+                            .with(WriterConfig.MIN_READ_TIMEOUT_MILLIS, 100L)
+                            .with(WriterConfig.MAX_READ_TIMEOUT_MILLIS, 500L)
+                    );
             if (storageFactory != null) {
                 if (dataLogFactory != null) {
                     this.serviceBuilder = ServiceBuilder.newInMemoryBuilder(configBuilder.build())
@@ -388,6 +395,7 @@ public class Tier1RecoveryCommandTest {
         public void restartControllerAndSegmentStore(StorageFactory storageFactory, BookKeeperLogFactory dataLogFactory)
                 throws DurableDataLogException, InterruptedException {
             this.segmentStoreRunner = new SegmentStoreRunner(storageFactory, dataLogFactory, this.containerCount);
+            log.info("bk port to be connected = {}", this.bookKeeperRunner.bkPort);
             this.controllerRunner = new ControllerRunner(this.bookKeeperRunner.bkPort, this.segmentStoreRunner.servicePort, containerCount);
         }
 
