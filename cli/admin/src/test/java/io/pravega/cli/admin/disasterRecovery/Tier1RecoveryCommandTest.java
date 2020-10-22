@@ -71,7 +71,7 @@ public class Tier1RecoveryCommandTest {
     @Getter
     private ScheduledExecutorService executor;
     private static final Duration TIMEOUT = Duration.ofMillis(30 * 1000);
-    private static final int NUM_EVENTS = 300;
+    private static final int NUM_EVENTS = 1;
     private static final String EVENT = "12345";
     private static final String SCOPE = "testScope";
     private File baseDir = null;
@@ -83,7 +83,7 @@ public class Tier1RecoveryCommandTest {
     protected static final AtomicReference<AdminCommandState> STATE = new AtomicReference<>();
 
     @Rule
-    public final Timeout globalTimeout = new Timeout(100, TimeUnit.SECONDS);
+    public final Timeout globalTimeout = new Timeout(140, TimeUnit.SECONDS);
     private static final Duration READ_TIMEOUT = Duration.ofMillis(1000);
 
 
@@ -160,7 +160,8 @@ public class Tier1RecoveryCommandTest {
         String commandResult = TestUtils.executeCommand("storage Tier1-recovery ./build", STATE.get());
         // Start a new segment store and controller
         log.info("Recovery complete.");
-        pravegaRunner.restartControllerAndSegmentStore(this.storageFactory, null);
+        val factory = new BookKeeperLogFactory(pravegaRunner.bookKeeperRunner.bkConfig.get(), pravegaRunner.bookKeeperRunner.zkClient.get(), executor);
+        pravegaRunner.restartControllerAndSegmentStore(this.storageFactory, factory);
         log.info("Started a controller and segment store.");
         // Create the client with new controller.
         try (val clientRunner = new ClientRunner(pravegaRunner.controllerRunner)) {
@@ -206,6 +207,7 @@ public class Tier1RecoveryCommandTest {
 
         for (int q = 0; q < NUM_EVENTS;) {
             String eventRead = reader.readNextEvent(READ_TIMEOUT.toMillis()).getEvent();
+            log.info("Event Read = {}", eventRead);
             Assert.assertEquals("Event written and read back don't match", EVENT, eventRead);
             q++;
         }
@@ -250,7 +252,7 @@ public class Tier1RecoveryCommandTest {
                     .builder()
                     .connectString("localhost:" + bkPort)
                     .namespace(baseNamespace)
-                    .retryPolicy(new ExponentialBackoffRetry(1000, 5))
+                    .retryPolicy(new ExponentialBackoffRetry(1000, 10))
                     .build());
 
             this.zkClient.get().start();
