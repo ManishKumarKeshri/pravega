@@ -71,7 +71,7 @@ public class Tier1RecoveryCommandTest {
     @Getter
     private ScheduledExecutorService executor;
     private static final Duration TIMEOUT = Duration.ofMillis(30 * 1000);
-    private static final int NUM_EVENTS = 1;
+    private static final int NUM_EVENTS = 10;
     private static final String EVENT = "12345";
     private static final String SCOPE = "testScope";
     private File baseDir = null;
@@ -408,6 +408,4 @@ public class Tier1RecoveryCommandTest {
             this.bookKeeperRunner.close();
         }
     }
-
-
 }
