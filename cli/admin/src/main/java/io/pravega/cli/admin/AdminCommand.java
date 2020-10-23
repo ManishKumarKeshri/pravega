@@ -112,6 +112,9 @@ public abstract class AdminCommand {
         return getCommandArgs().getState().getConfigBuilder().build().getConfig(ServiceConfig::builder);
     }
 
+    /**
+     * Creates a new instance of the ServiceConfig class from the shared AdminCommandState.
+     */
     protected ServiceBuilderConfig getServiceBuilderConfig() {
         return getCommandArgs().getState().getConfigBuilder().build();
     }
@@ -128,13 +131,12 @@ public abstract class AdminCommand {
      */
     protected CuratorFramework createZKClient() {
         val serviceConfig = getServiceConfig();
-        log.info("cluster name = {}", serviceConfig.getClusterName());
-        log.info("zk connection = {}", serviceConfig.getZkURL());
         CuratorFramework zkClient = CuratorFrameworkFactory
                 .builder()
                 .connectString(serviceConfig.getZkURL())
-                .namespace("pravega")
-                .retryPolicy(new ExponentialBackoffRetry(1000, 5))
+                .namespace(serviceConfig.getClusterName())
+                .retryPolicy(new ExponentialBackoffRetry(serviceConfig.getZkRetrySleepMs(), serviceConfig.getZkRetryCount()))
+                .sessionTimeoutMs(serviceConfig.getZkSessionTimeoutMs())
                 .build();
         zkClient.start();
         return zkClient;

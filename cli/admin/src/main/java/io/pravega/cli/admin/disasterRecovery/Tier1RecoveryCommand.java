@@ -1,3 +1,12 @@
+/**
+ * Copyright (c) Dell Inc., or its subsidiaries. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ */
 package io.pravega.cli.admin.disasterRecovery;
 
 import io.pravega.cli.admin.CommandArgs;
@@ -52,13 +61,17 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Loads the storage instance, recovers all segments from there.
+ */
 @Slf4j
 public class Tier1RecoveryCommand extends DataRecoveryCommand {
     private final int containerCount;
     private final StorageFactory storageFactory;
     private static final int CONTAINER_EPOCH = 1;
-    private String filePath;
     private static final Duration TIMEOUT = Duration.ofMillis(100 * 1000);
+
+    // Configurations for setting the context for running debug segment container(s)
     private static final DurableLogConfig DURABLE_LOG_CONFIG = DurableLogConfig
             .builder()
             .with(DurableLogConfig.CHECKPOINT_MIN_COMMIT_COUNT, 1)
@@ -69,7 +82,8 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
             .builder()
             .with(ContainerConfig.SEGMENT_METADATA_EXPIRATION_SECONDS, 10 * 60)
             .build();
-    // Configurations for DebugSegmentContainer
+
+    // Configurations for DebugSegmentContainer(s)
     private static final ContainerConfig CONTAINER_CONFIG = ContainerConfig
             .builder()
             .with(ContainerConfig.SEGMENT_METADATA_EXPIRATION_SECONDS, (int) DEFAULT_CONFIG.getSegmentMetadataExpiration().getSeconds())
@@ -78,13 +92,18 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
 
     ScheduledExecutorService executorService = ExecutorServiceHelpers.newScheduledThreadPool(100, "recoveryProcessor");
 
-    @SneakyThrows
+    /**
+     * Creates an instance of Tier1RecoveryCommand class.
+     *
+     * @param args The arguments for the command.
+     */
     public Tier1RecoveryCommand(CommandArgs args) {
         super(args);
         this.containerCount = getServiceConfig().getContainerCount();
-        this.storageFactory = getStorageFactory(executorService);
+        this.storageFactory = getStorageFactory(ExecutorServiceHelpers.newScheduledThreadPool(1, "storageProcessor"));
     }
 
+    @Override
     public void execute() throws Exception {
         setLogging(descriptor().getName());
         log.info("Container Count = {}", this.containerCount);
@@ -96,10 +115,9 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
 
         val serviceConfig = getServiceConfig();
         val bkConfig = getCommandArgs().getState().getConfigBuilder()
-                .include(BookKeeperConfig.builder().with(BookKeeperConfig.ZK_ADDRESS, serviceConfig.getZkURL())
-                        .with(BookKeeperConfig.ZK_METADATA_PATH, "segmentstore/containers")
-                        .with(BookKeeperConfig.BK_LEDGER_PATH, "/pravega/bookkeeper/ledgers"))
-                .build().getConfig(BookKeeperConfig::builder);
+                .include(BookKeeperConfig.builder().with(BookKeeperConfig.ZK_ADDRESS, serviceConfig.getZkURL()))
+                        .build().getConfig(BookKeeperConfig::builder);
+
         val zkClient = createZKClient();
         val factory = new BookKeeperLogFactory(bkConfig, zkClient, getCommandArgs().getState().getExecutor());
         try {

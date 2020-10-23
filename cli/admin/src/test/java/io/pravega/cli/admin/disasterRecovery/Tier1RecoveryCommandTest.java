@@ -24,7 +24,6 @@ import io.pravega.client.stream.impl.ClientFactoryImpl;
 import io.pravega.client.stream.impl.UTF8StringSerializer;
 import io.pravega.common.concurrent.ExecutorServiceHelpers;
 import io.pravega.common.io.FileHelpers;
-import io.pravega.segmentstore.contracts.ContainerNotFoundException;
 import io.pravega.segmentstore.contracts.StreamSegmentStore;
 import io.pravega.segmentstore.contracts.tables.TableStore;
 import io.pravega.segmentstore.server.host.handler.PravegaConnectionListener;
@@ -40,12 +39,10 @@ import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperServiceRunner;
 import io.pravega.storage.filesystem.FileSystemStorageConfig;
 import io.pravega.storage.filesystem.FileSystemStorageFactory;
 import io.pravega.test.integration.demo.ControllerWrapper;
-import io.pravega.test.integration.utils.SetupUtils;
 import lombok.Cleanup;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
-import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
@@ -143,7 +140,6 @@ public class Tier1RecoveryCommandTest {
         // start a new BookKeeper and ZooKeeper.
         pravegaRunner.bookKeeperRunner = new BookKeeperRunner(instanceId++, bookieCount);
 
-        Properties bkProperties = new Properties();
         STATE.set(new AdminCommandState());
         Properties pravegaProperties = new Properties();
         pravegaProperties.setProperty("pravegaservice.container.count", "1");
@@ -152,9 +148,10 @@ public class Tier1RecoveryCommandTest {
         pravegaProperties.setProperty("filesystem.root", this.baseDir.getAbsolutePath());
         log.info("zk connect string = {}", "localhost:" + pravegaRunner.bookKeeperRunner.bkPort);
         pravegaProperties.setProperty("pravegaservice.zk.connect.uri", "localhost:" + pravegaRunner.bookKeeperRunner.bkPort);
-        bkProperties.setProperty("bookkeeper.ledger.path", pravegaRunner.bookKeeperRunner.ledgerPath);
-        bkProperties.setProperty("bookkeeper.zk.metadata.path", pravegaRunner.bookKeeperRunner.logMetaNamespace);
-        bkProperties.setProperty("pravegaservice.clusterName", pravegaRunner.bookKeeperRunner.baseNamespace);
+        pravegaProperties.setProperty("bookkeeper.ledger.path", pravegaRunner.bookKeeperRunner.ledgerPath);
+        pravegaProperties.setProperty("bookkeeper.zk.metadata.path", pravegaRunner.bookKeeperRunner.logMetaNamespace);
+        log.info("Cluster name = {}", pravegaRunner.bookKeeperRunner.baseNamespace);
+        pravegaProperties.setProperty("pravegaservice.clusterName", pravegaRunner.bookKeeperRunner.baseNamespace);
         STATE.get().getConfigBuilder().include(pravegaProperties);
 
         String commandResult = TestUtils.executeCommand("storage Tier1-recovery ./build", STATE.get());

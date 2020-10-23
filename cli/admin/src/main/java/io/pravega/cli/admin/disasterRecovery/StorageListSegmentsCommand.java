@@ -1,3 +1,12 @@
+/**
+ * Copyright (c) Dell Inc., or its subsidiaries. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ */
 package io.pravega.cli.admin.disasterRecovery;
 
 import io.pravega.cli.admin.CommandArgs;
@@ -17,17 +26,29 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 
+/**
+ * Loads the storage instance and lists all non-shadow segments from there.
+ */
 @Slf4j
 public class StorageListSegmentsCommand extends DataRecoveryCommand {
+    /**
+     * Header line for writing segments' details to csv files.
+     */
+    private static final List<String> HEADER = Arrays.asList("Sealed Status", "Length", "Segment Name");
+    private static final int CONTAINER_EPOCH = 1;
     private final int containerCount;
     private final ScheduledExecutorService scheduledExecutorService = ExecutorServiceHelpers.newScheduledThreadPool(10,
             "listSegmentsProcessor");
     private final SegmentToContainerMapper segToConMapper;
-    private static final List<String> HEADER = Arrays.asList("Sealed Status", "Length", "Segment Name");
     private final StorageFactory storageFactory;
-    private static final int CONTAINER_EPOCH = 1;
     private String filePath;
     private final FileWriter[] csvWriters;
+
+    /**
+     * Creates an instance of StorageListSegmentsCommand class.
+     *
+     * @param args The arguments for the command.
+     */
     public StorageListSegmentsCommand(CommandArgs args) {
         super(args);
         this.containerCount = getServiceConfig().getContainerCount();
@@ -36,8 +57,13 @@ public class StorageListSegmentsCommand extends DataRecoveryCommand {
         this.csvWriters = new FileWriter[this.containerCount];;
     }
 
+    /**
+     * Creates a csv file for each container. All segments belonging to a containerId have their details written to the
+     * csv file for that container.
+     *
+     * @throws Exception
+     */
     private void createCSVFiles() throws Exception {
-        // Create a csv file for each container to store segments for each.
         for (int containerId=0; containerId < this.containerCount; containerId++) {
             File f = new File(this.filePath + "/" + "Container_" + containerId + ".csv");
             if(f.exists()){
@@ -68,7 +94,7 @@ public class StorageListSegmentsCommand extends DataRecoveryCommand {
         storage.initialize(CONTAINER_EPOCH);
         log.info("Loaded {} Storage.", getServiceConfig().getStorageImplementation().toString());
 
-        // Gets total segments listed.
+        // Gets total number of segments listed.
         int segmentsCount = 0;
 
         createCSVFiles();
