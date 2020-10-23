@@ -1,3 +1,12 @@
+/**
+ * Copyright (c) Dell Inc., or its subsidiaries. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ */
 package io.pravega.cli.admin.disasterRecovery;
 
 import io.pravega.cli.admin.AdminCommandState;
@@ -40,7 +49,6 @@ import io.pravega.storage.filesystem.FileSystemStorageConfig;
 import io.pravega.storage.filesystem.FileSystemStorageFactory;
 import io.pravega.test.integration.demo.ControllerWrapper;
 import lombok.Cleanup;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.apache.curator.framework.CuratorFramework;
@@ -63,39 +71,42 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+/**
+ * Tests Tier1 recovery command.
+ */
 @Slf4j
 public class Tier1RecoveryCommandTest {
-    @Getter
-    private ScheduledExecutorService executor;
     private static final Duration TIMEOUT = Duration.ofMillis(30 * 1000);
     private static final int NUM_EVENTS = 10;
     private static final String EVENT = "12345";
     private static final String SCOPE = "testScope";
-    private File baseDir = null;
-    private FileSystemStorageConfig adapterConfig;
-    private StorageFactory storageFactory = null;
-    private final ScalingPolicy scalingPolicy = ScalingPolicy.fixed(1);
-    private final StreamConfiguration config = StreamConfiguration.builder().scalingPolicy(scalingPolicy).build();
     // Setup utility.
-    protected static final AtomicReference<AdminCommandState> STATE = new AtomicReference<>();
+    private static final Duration READ_TIMEOUT = Duration.ofMillis(1000);
+    private static final AtomicReference<AdminCommandState> STATE = new AtomicReference<>();
 
     @Rule
     public final Timeout globalTimeout = new Timeout(140, TimeUnit.SECONDS);
-    private static final Duration READ_TIMEOUT = Duration.ofMillis(1000);
 
+    private final ScheduledExecutorService executor = ExecutorServiceHelpers.newScheduledThreadPool(10, "tier1 recovery test pool");
+    private final ScalingPolicy scalingPolicy = ScalingPolicy.fixed(1);
+    private final StreamConfiguration config = StreamConfiguration.builder().scalingPolicy(scalingPolicy).build();
+
+    private File baseDir = null;
+    private FileSystemStorageConfig adapterConfig;
+    private StorageFactory storageFactory = null;
+    private File tempDir = null;
+    private BookKeeperLogFactory factory;
 
     @Before
     public void setUp() throws Exception {
-        this.executor = ExecutorServiceHelpers.newScheduledThreadPool(2, "storage pool");
-        this.baseDir = Files.createTempDirectory("test_hdfs").toFile().getAbsoluteFile();
+        this.baseDir = Files.createTempDirectory("testTier1Recovery").toFile().getAbsoluteFile();
+        this.tempDir = Files.createTempDirectory("Tier1Recovery").toFile().getAbsoluteFile();
         this.adapterConfig = FileSystemStorageConfig.builder()
                 .with(FileSystemStorageConfig.ROOT, this.baseDir.getAbsolutePath())
                 .with(FileSystemStorageConfig.REPLACE_ENABLED, true)
                 .build();
 
         this.storageFactory = new FileSystemStorageFactory(adapterConfig, this.executor);
-
-
     }
 
     // Creates the given scope and stream using the given controller instance.
@@ -119,7 +130,7 @@ public class Tier1RecoveryCommandTest {
         int containerCount = 1;
         @Cleanup
         PravegaRunner pravegaRunner = new PravegaRunner(instanceId++, bookieCount, containerCount, this.storageFactory);
-        String streamName = "testListSegmentsCommand";
+        String streamName = "testTier1RecoveryCommand";
 
         createScopeStream(pravegaRunner.controllerRunner.controller, SCOPE, streamName);
         try (val clientRunner = new ClientRunner(pravegaRunner.controllerRunner)) {
@@ -140,29 +151,30 @@ public class Tier1RecoveryCommandTest {
         // start a new BookKeeper and ZooKeeper.
         pravegaRunner.bookKeeperRunner = new BookKeeperRunner(instanceId++, bookieCount);
 
+        // set pravega properties for the test
         STATE.set(new AdminCommandState());
         Properties pravegaProperties = new Properties();
         pravegaProperties.setProperty("pravegaservice.container.count", "1");
         pravegaProperties.setProperty("pravegaservice.storage.impl.name", "FILESYSTEM");
         pravegaProperties.setProperty("pravegaservice.storage.layout", "ROLLING_STORAGE");
         pravegaProperties.setProperty("filesystem.root", this.baseDir.getAbsolutePath());
-        log.info("zk connect string = {}", "localhost:" + pravegaRunner.bookKeeperRunner.bkPort);
         pravegaProperties.setProperty("pravegaservice.zk.connect.uri", "localhost:" + pravegaRunner.bookKeeperRunner.bkPort);
         pravegaProperties.setProperty("bookkeeper.ledger.path", pravegaRunner.bookKeeperRunner.ledgerPath);
         pravegaProperties.setProperty("bookkeeper.zk.metadata.path", pravegaRunner.bookKeeperRunner.logMetaNamespace);
-        log.info("Cluster name = {}", pravegaRunner.bookKeeperRunner.baseNamespace);
         pravegaProperties.setProperty("pravegaservice.clusterName", pravegaRunner.bookKeeperRunner.baseNamespace);
         STATE.get().getConfigBuilder().include(pravegaProperties);
 
-        String commandResult = TestUtils.executeCommand("storage Tier1-recovery ./build", STATE.get());
+        // Command under test
+        TestUtils.executeCommand("storage Tier1-recovery " + this.tempDir.getAbsolutePath(), STATE.get());
+
         // Start a new segment store and controller
-        log.info("Recovery complete.");
-        val factory = new BookKeeperLogFactory(pravegaRunner.bookKeeperRunner.bkConfig.get(), pravegaRunner.bookKeeperRunner.zkClient.get(), executor);
+        factory = new BookKeeperLogFactory(pravegaRunner.bookKeeperRunner.bkConfig.get(), pravegaRunner.bookKeeperRunner.zkClient.get(),
+                executor);
         pravegaRunner.restartControllerAndSegmentStore(this.storageFactory, factory);
         log.info("Started a controller and segment store.");
         // Create the client with new controller.
         try (val clientRunner = new ClientRunner(pravegaRunner.controllerRunner)) {
-            // Try reading all events again to verify that the recovery was successful.
+            // Try reading all events to verify that the recovery was successful.
             readAllEvents(streamName, clientRunner.clientFactory, clientRunner.readerGroupManager, "RG", "R");
             log.info("Read all events again to verify that segments were recovered.");
         }
@@ -170,10 +182,11 @@ public class Tier1RecoveryCommandTest {
     }
 
     @After
-    public void tearDown() throws Exception {
+    public void tearDown() {
         STATE.get().close();
+        factory.close();
         FileHelpers.deleteFileOrDirectory(baseDir);
-        baseDir = null;
+        FileHelpers.deleteFileOrDirectory(tempDir);
     }
 
 
@@ -204,7 +217,6 @@ public class Tier1RecoveryCommandTest {
 
         for (int q = 0; q < NUM_EVENTS;) {
             String eventRead = reader.readNextEvent(READ_TIMEOUT.toMillis()).getEvent();
-            log.info("Event Read = {}", eventRead);
             Assert.assertEquals("Event written and read back don't match", EVENT, eventRead);
             q++;
         }
@@ -218,11 +230,11 @@ public class Tier1RecoveryCommandTest {
         private final AtomicReference<BookKeeperConfig> bkConfig = new AtomicReference<>();
         private final AtomicReference<CuratorFramework> zkClient = new AtomicReference<>();
         private final AtomicReference<BookKeeperServiceRunner> bkService = new AtomicReference<>();
-        public String ledgerPath;
-        public String logMetaNamespace;
-        public String baseNamespace;
+        private final String ledgerPath;
+        private final String logMetaNamespace;
+        private final String baseNamespace;
         BookKeeperRunner(int instanceId, int bookieCount) throws Exception {
-            ledgerPath = "/pravega/bookkeeper/ledgers";
+            ledgerPath = "/pravega/bookkeeper/ledgers" + instanceId;
             bkPort = io.pravega.test.common.TestUtils.getAvailableListenPort();
             val bookiePorts = new ArrayList<Integer>();
             for (int i = 0; i < bookieCount; i++) {
@@ -244,7 +256,7 @@ public class Tier1RecoveryCommandTest {
             bkService.set(this.bookKeeperServiceRunner);
 
             // Create a ZKClient with a unique namespace.
-            baseNamespace = "pravega";
+            baseNamespace = "pravega" + instanceId;
             this.zkClient.set(CuratorFrameworkFactory
                     .builder()
                     .connectString("localhost:" + bkPort)
@@ -254,7 +266,7 @@ public class Tier1RecoveryCommandTest {
 
             this.zkClient.get().start();
 
-            logMetaNamespace = "segmentstore/containers";
+            logMetaNamespace = "segmentstore/containers" + instanceId;
             this.bkConfig.set(BookKeeperConfig
                     .builder()
                     .with(BookKeeperConfig.ZK_ADDRESS, "localhost:" + bkPort)

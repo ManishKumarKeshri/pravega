@@ -33,7 +33,6 @@ import io.pravega.segmentstore.server.host.handler.PravegaConnectionListener;
 import io.pravega.segmentstore.server.store.ServiceBuilder;
 import io.pravega.segmentstore.server.store.ServiceBuilderConfig;
 import io.pravega.segmentstore.storage.StorageFactory;
-import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperLogFactory;
 import io.pravega.test.common.TestUtils;
 import io.pravega.test.common.TestingServerStarter;
 import io.pravega.test.integration.demo.ControllerWrapper;
@@ -74,8 +73,8 @@ public final class SetupUtils {
     // The test Scope name.
     @Getter
     private final String scope = "scope";
-    private int controllerRPCPort = TestUtils.getAvailableListenPort();
-    private int controllerRESTPort = TestUtils.getAvailableListenPort();
+    private final int controllerRPCPort = TestUtils.getAvailableListenPort();
+    private final int controllerRESTPort = TestUtils.getAvailableListenPort();
     @Getter
     private int servicePort = TestUtils.getAvailableListenPort();
     private final ClientConfig clientConfig = ClientConfig.builder().controllerURI(URI.create("tcp://localhost:" + controllerRPCPort)).build();
@@ -83,6 +82,7 @@ public final class SetupUtils {
     /**
      * Start all pravega related services required for the test deployment.
      *
+     * @param storageFactory    A storage factory instance to create segment store.
      * @throws Exception on any errors.
      */
     public void startAllServices(StorageFactory storageFactory) throws Exception {
@@ -92,7 +92,8 @@ public final class SetupUtils {
     /**
      * Start all pravega related services required for the test deployment.
      *
-     * @param numThreads the number of threads for the internal client threadpool.
+     * @param numThreads        the number of threads for the internal client threadpool.
+     * @param storageFactory    A storage factory instance to create segment store.
      * @throws Exception on any errors.
      */
     public void startAllServices(Integer numThreads, StorageFactory storageFactory) throws Exception {
@@ -102,7 +103,7 @@ public final class SetupUtils {
         }
         this.executor = ExecutorServiceHelpers.newScheduledThreadPool(2, "Controller pool");
         this.controller = new ControllerImpl(ControllerImplConfig.builder().clientConfig(clientConfig).build(),
-                executor);
+                                             executor);
         this.clientFactory = new ClientFactoryImpl(scope, controller, clientConfig);
 
         // Start zookeeper.
@@ -133,113 +134,6 @@ public final class SetupUtils {
         log.info("Initialized Pravega Controller");
     }
 
-    public void startZKService() throws Exception {
-        // Start zookeeper.
-        this.servicePort = TestUtils.getAvailableListenPort();;
-        this.zkTestServer = new TestingServerStarter().start();
-        this.zkTestServer.start();
-    }
-
-    public void stopZKService() throws Exception {
-        // Start zookeeper.
-        this.zkTestServer.close();
-    }
-
-    public void startController() throws Exception {
-        controllerRPCPort = TestUtils.getAvailableListenPort();
-        controllerRESTPort = TestUtils.getAvailableListenPort();
-        this.executor = ExecutorServiceHelpers.newScheduledThreadPool(2, "Controller pool");
-        this.controller = new ControllerImpl(ControllerImplConfig.builder().clientConfig(clientConfig).build(),
-                executor);
-        // Start Controller.
-        this.controllerWrapper = new ControllerWrapper(this.zkTestServer.getConnectString(), false, true,
-                controllerRPCPort,
-                "localhost", servicePort,
-                Config.HOST_STORE_CONTAINER_COUNT, controllerRESTPort);
-        this.controllerWrapper.awaitRunning();
-        this.controllerWrapper.getController().createScope(scope).get();
-        log.info("Initialized Pravega Controller");
-    }
-
-    public void startSegmentStore(StorageFactory storageFactory) throws Exception {
-
-        this.clientFactory = new ClientFactoryImpl(scope, controller, clientConfig);
-        // Start Pravega Service.
-        if (storageFactory != null) {
-            serviceBuilder = ServiceBuilder.newInMemoryBuilder(ServiceBuilderConfig.getDefaultConfig())
-                    .withStorageFactory(setup -> storageFactory);
-        } else {
-            serviceBuilder = ServiceBuilder.newInMemoryBuilder(ServiceBuilderConfig.getDefaultConfig());
-        }
-
-        serviceBuilder.initialize();
-        StreamSegmentStore store = serviceBuilder.createStreamSegmentService();
-        this.server = new PravegaConnectionListener(false, servicePort, store, serviceBuilder.createTableStoreService(),
-                serviceBuilder.getLowPriorityExecutor());
-        this.server.startListening();
-        log.info("Started Pravega Service");
-    }
-
-    public void startSegmentStoreAndController(StorageFactory storageFactory) throws Exception {
-        this.executor = ExecutorServiceHelpers.newScheduledThreadPool(2, "Controller pool");
-        this.controller = new ControllerImpl(ControllerImplConfig.builder().clientConfig(clientConfig).build(),
-                executor);
-        this.clientFactory = new ClientFactoryImpl(scope, controller, clientConfig);
-        // Start Pravega Service.
-        if (storageFactory != null) {
-            serviceBuilder = ServiceBuilder.newInMemoryBuilder(ServiceBuilderConfig.getDefaultConfig())
-                    .withStorageFactory(setup -> storageFactory);
-        } else {
-            serviceBuilder = ServiceBuilder.newInMemoryBuilder(ServiceBuilderConfig.getDefaultConfig());
-        }
-
-        serviceBuilder.initialize();
-        StreamSegmentStore store = serviceBuilder.createStreamSegmentService();
-        this.server = new PravegaConnectionListener(false, servicePort, store, serviceBuilder.createTableStoreService(),
-                serviceBuilder.getLowPriorityExecutor());
-        this.server.startListening();
-        log.info("Started Pravega Service");
-
-        // Start Controller.
-        this.controllerWrapper = new ControllerWrapper(this.zkTestServer.getConnectString(), false, true, controllerRPCPort,
-                "localhost", servicePort,
-                Config.HOST_STORE_CONTAINER_COUNT, controllerRESTPort);
-        this.controllerWrapper.awaitRunning();
-        this.controllerWrapper.getController().createScope(scope).get();
-        log.info("Initialized Pravega Controller");
-    }
-
-    public void startSegmentStoreAndController(StorageFactory storageFactory, String zkConnectString) throws Exception {
-        controllerRPCPort = TestUtils.getAvailableListenPort();
-        controllerRESTPort = TestUtils.getAvailableListenPort();
-        servicePort = TestUtils.getAvailableListenPort();
-        this.executor = ExecutorServiceHelpers.newScheduledThreadPool(2, "Controller pool");
-        this.controller = new ControllerImpl(ControllerImplConfig.builder().clientConfig(clientConfig).build(),
-                executor);
-        this.clientFactory = new ClientFactoryImpl(scope, controller, clientConfig);
-        // Start Pravega Service.
-        if (storageFactory != null) {
-            serviceBuilder = ServiceBuilder.newInMemoryBuilder(ServiceBuilderConfig.getDefaultConfig())
-                    .withStorageFactory(setup -> storageFactory);
-        } else {
-            serviceBuilder = ServiceBuilder.newInMemoryBuilder(ServiceBuilderConfig.getDefaultConfig());
-        }
-
-        serviceBuilder.initialize();
-        StreamSegmentStore store = serviceBuilder.createStreamSegmentService();
-        this.server = new PravegaConnectionListener(false, servicePort, store, serviceBuilder.createTableStoreService(),
-                serviceBuilder.getLowPriorityExecutor());
-        this.server.startListening();
-        log.info("Started Pravega Service");
-
-        // Start Controller.
-        this.controllerWrapper = new ControllerWrapper(zkConnectString, false, true, controllerRPCPort,
-                "localhost", servicePort,
-                Config.HOST_STORE_CONTAINER_COUNT, controllerRESTPort);
-        this.controllerWrapper.awaitRunning();
-        this.controllerWrapper.getController().createScope(scope).get();
-        log.info("Initialized Pravega Controller");
-    }
     /**
      * Stop the pravega cluster and release all resources.
      *
@@ -275,9 +169,9 @@ public final class SetupUtils {
         StreamManager streamManager = StreamManager.create(clientConfig);
         streamManager.createScope(scope);
         streamManager.createStream(scope, streamName,
-                StreamConfiguration.builder()
-                        .scalingPolicy(ScalingPolicy.fixed(numSegments))
-                        .build());
+                                   StreamConfiguration.builder()
+                                                      .scalingPolicy(ScalingPolicy.fixed(numSegments))
+                                                      .build());
         log.info("Created stream: " + streamName);
     }
 
@@ -315,7 +209,7 @@ public final class SetupUtils {
 
         final String readerGroupId = UUID.randomUUID().toString();
         return clientFactory.createReader(readerGroupId, readerGroup, new IntegerSerializer(),
-                ReaderConfig.builder().build());
+                                          ReaderConfig.builder().build());
     }
 
     public URI getControllerUri() {

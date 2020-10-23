@@ -10,11 +10,8 @@
 package io.pravega.cli.admin.disasterRecovery;
 
 import io.pravega.cli.admin.CommandArgs;
-import io.pravega.common.Exceptions;
 import io.pravega.common.concurrent.ExecutorServiceHelpers;
-import io.pravega.common.concurrent.Futures;
 import io.pravega.common.concurrent.Services;
-import io.pravega.segmentstore.contracts.StreamSegmentNotExistsException;
 import io.pravega.segmentstore.server.CacheManager;
 import io.pravega.segmentstore.server.CachePolicy;
 import io.pravega.segmentstore.server.OperationLogFactory;
@@ -37,37 +34,27 @@ import io.pravega.segmentstore.server.tables.ContainerTableExtensionImpl;
 import io.pravega.segmentstore.server.writer.StorageWriterFactory;
 import io.pravega.segmentstore.server.writer.WriterConfig;
 import io.pravega.segmentstore.storage.DurableDataLogException;
-import io.pravega.segmentstore.storage.DurableDataLogFactory;
 import io.pravega.segmentstore.storage.Storage;
 import io.pravega.segmentstore.storage.StorageFactory;
 import io.pravega.segmentstore.storage.cache.CacheStorage;
 import io.pravega.segmentstore.storage.cache.DirectMemoryCache;
 import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperConfig;
 import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperLogFactory;
-import io.pravega.shared.NameUtils;
 import lombok.Cleanup;
-import lombok.SneakyThrows;
-import lombok.extern.slf4j.Slf4j;
 import lombok.val;
+import org.slf4j.event.Level;
 
-import java.text.SimpleDateFormat;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Loads the storage instance, recovers all segments from there.
  */
-@Slf4j
 public class Tier1RecoveryCommand extends DataRecoveryCommand {
-    private final int containerCount;
-    private final StorageFactory storageFactory;
     private static final int CONTAINER_EPOCH = 1;
     private static final Duration TIMEOUT = Duration.ofMillis(100 * 1000);
 
@@ -82,6 +69,22 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
             .builder()
             .with(ContainerConfig.SEGMENT_METADATA_EXPIRATION_SECONDS, 10 * 60)
             .build();
+    private static final ReadIndexConfig DEFAULT_READ_INDEX_CONFIG = ReadIndexConfig.builder().with(ReadIndexConfig.STORAGE_READ_ALIGNMENT, 1024).build();
+
+    private static final AttributeIndexConfig DEFAULT_ATTRIBUTE_INDEX_CONFIG = AttributeIndexConfig
+            .builder()
+            .with(AttributeIndexConfig.MAX_INDEX_PAGE_SIZE, 2 * 1024)
+            .with(AttributeIndexConfig.ATTRIBUTE_SEGMENT_ROLLING_SIZE, 1000)
+            .build();
+
+    private static final WriterConfig DEFAULT_WRITER_CONFIG = WriterConfig
+            .builder()
+            .with(WriterConfig.FLUSH_THRESHOLD_BYTES, 1)
+            .with(WriterConfig.FLUSH_ATTRIBUTES_THRESHOLD, 3)
+            .with(WriterConfig.FLUSH_THRESHOLD_MILLIS, 25L)
+            .with(WriterConfig.MIN_READ_TIMEOUT_MILLIS, 10L)
+            .with(WriterConfig.MAX_READ_TIMEOUT_MILLIS, 250L)
+            .build();
 
     // Configurations for DebugSegmentContainer(s)
     private static final ContainerConfig CONTAINER_CONFIG = ContainerConfig
@@ -90,7 +93,9 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
             .with(ContainerConfig.MAX_ACTIVE_SEGMENT_COUNT, 100)
             .build();
 
-    ScheduledExecutorService executorService = ExecutorServiceHelpers.newScheduledThreadPool(100, "recoveryProcessor");
+    private final ScheduledExecutorService executorService = ExecutorServiceHelpers.newScheduledThreadPool(100, "recoveryProcessor");
+    private final int containerCount;
+    private final StorageFactory storageFactory;
 
     /**
      * Creates an instance of Tier1RecoveryCommand class.
@@ -106,19 +111,21 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
     @Override
     public void execute() throws Exception {
         setLogging(descriptor().getName());
-        log.info("Container Count = {}", this.containerCount);
+        output(Level.INFO, "Container Count = %d", this.containerCount);
 
         @Cleanup
         Storage storage = this.storageFactory.createStorageAdapter();
         storage.initialize(CONTAINER_EPOCH);
-        log.info("Loaded {} Storage.", getServiceConfig().getStorageImplementation().toString());
+        output(Level.INFO, "Loaded %s Storage.", getServiceConfig().getStorageImplementation().toString());
 
         val serviceConfig = getServiceConfig();
         val bkConfig = getCommandArgs().getState().getConfigBuilder()
                 .include(BookKeeperConfig.builder().with(BookKeeperConfig.ZK_ADDRESS, serviceConfig.getZkURL()))
                         .build().getConfig(BookKeeperConfig::builder);
 
+        @Cleanup
         val zkClient = createZKClient();
+        @Cleanup
         val factory = new BookKeeperLogFactory(bkConfig, zkClient, getCommandArgs().getState().getExecutor());
         try {
             factory.initialize();
@@ -127,29 +134,27 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
             throw ex;
         }
 
-        log.info("Starting recovery...");
-        Map<Integer, String> backUpMetadataSegments = getBackUpMetadataSegments(storage, this.containerCount, executorService);
-
-        for (int containerId = 0; containerId < containerCount; containerId++) {
-            ContainerRecoveryUtils.deleteMetadataAndAttributeSegments(storage, containerId).join();
-        }
+        output(Level.INFO, "Starting recovery...");
+        Map<Integer, String> backUpMetadataSegments = ContainerRecoveryUtils.getBackUpMetadataSegments(storage, this.containerCount, executorService);
 
         @Cleanup
         ContainerContext context = createContainerContext(executorService);
         Map<Integer, DebugStreamSegmentContainer> debugStreamSegmentContainerMap = getContainers(context, this.containerCount, factory,
                 this.storageFactory);
+        output(Level.INFO, "Debug segment containers started.");
 
-        log.info("Recovering all segments...");
+        output(Level.INFO, "Recovering all segments...");
         ContainerRecoveryUtils.recoverAllSegments(storage, debugStreamSegmentContainerMap, executorService);
-        log.info("All segments recovered.");
+        output(Level.INFO, "All segments recovered.");
 
         // Update core attributes from the backUp Metadata segments
+        output(Level.INFO, "Updating core attributes for segments registered.");
         ContainerRecoveryUtils.updateCoreAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService);
 
         // Waits for metadata segments to be flushed to LTS and then stops the debug segment containers
         stopDebugSegmentContainersPostFlush(debugStreamSegmentContainerMap);
-        log.info("Segments have been recovered.");
-        log.info("Recovery Done!");
+        output(Level.INFO, "Segments have been recovered.");
+        output(Level.INFO, "Recovery Done!");
     }
 
     // Closes the debug segment container instances in the given map after waiting for the metadata segment to be flushed to
@@ -157,37 +162,15 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
     private void stopDebugSegmentContainersPostFlush(Map<Integer, DebugStreamSegmentContainer> debugStreamSegmentContainerMap)
             throws Exception {
         for (val debugSegmentContainer : debugStreamSegmentContainerMap.values()) {
-            log.debug("Waiting for metadata segment of container {} to be flushed to the Long-Term storage.", debugSegmentContainer.getId());
+            output(Level.DEBUG, "Waiting for metadata segment of container %d to be flushed to the Long-Term storage.", debugSegmentContainer.getId());
             debugSegmentContainer.flushToStorage(TIMEOUT).join();
             Services.stopAsync(debugSegmentContainer, executorService).get(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
-            log.info("Stopping debug segment container {}.", debugSegmentContainer.getId());
+            output(Level.DEBUG, "Stopping debug segment container %d.", debugSegmentContainer.getId());
             debugSegmentContainer.close();
         }
     }
 
-    // Back up and delete container metadata segment and attributes index segment corresponding to each container Ids from the long term storage
-    private Map<Integer, String> getBackUpMetadataSegments(Storage storage, int containerCount, ScheduledExecutorService executorService)
-            throws Exception {
-        String fileSuffix = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
-        Map<Integer, String> backUpMetadataSegments = new HashMap<>();
 
-        val futures = new ArrayList<CompletableFuture<Void>>();
-
-        for (int containerId = 0; containerId < containerCount; containerId++) {
-            String backUpMetadataSegment = NameUtils.getMetadataSegmentName(containerId) + fileSuffix;
-            String backUpAttributeSegment = NameUtils.getAttributeSegmentName(backUpMetadataSegment);
-
-            int finalContainerId = containerId;
-            futures.add(Futures.exceptionallyExpecting(
-                    ContainerRecoveryUtils.backUpMetadataAndAttributeSegments(storage, containerId,
-                            backUpMetadataSegment, backUpAttributeSegment, executorService)
-                            .thenAccept(x -> ContainerRecoveryUtils.deleteMetadataAndAttributeSegments(storage, finalContainerId)
-                                    .thenAccept(z -> backUpMetadataSegments.put(finalContainerId, backUpMetadataSegment))
-                            ), ex -> Exceptions.unwrap(ex) instanceof StreamSegmentNotExistsException, null));
-        }
-        Futures.allOf(futures).get(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
-        return backUpMetadataSegments;
-    }
 
     // Creates debug segment container instances, puts them in a map and returns it.
     private Map<Integer, DebugStreamSegmentContainer> getContainers(ContainerContext context, int containerCount,
@@ -205,12 +188,13 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
 
             Services.startAsync(debugStreamSegmentContainer, executorService).get(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
             debugStreamSegmentContainerMap.put(containerId, debugStreamSegmentContainer);
+            output(Level.DEBUG, "Container %d started.", containerId);
         }
         return debugStreamSegmentContainerMap;
     }
 
     public static CommandDescriptor descriptor() {
-        return new CommandDescriptor(COMPONENT, "Tier1-recovery", "reconcile segments from container");
+        return new CommandDescriptor(COMPONENT, "Tier1-recovery", "Recover Tier1 state from the storage.");
     }
 
     public static class MetadataCleanupContainer extends DebugStreamSegmentContainer {
@@ -232,30 +216,11 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
 
 
     public static class ContainerContext implements AutoCloseable {
-
-        private static final ReadIndexConfig DEFAULT_READ_INDEX_CONFIG = ReadIndexConfig.builder().with(ReadIndexConfig.STORAGE_READ_ALIGNMENT, 1024).build();
-
-        private static final AttributeIndexConfig DEFAULT_ATTRIBUTE_INDEX_CONFIG = AttributeIndexConfig
-                .builder()
-                .with(AttributeIndexConfig.MAX_INDEX_PAGE_SIZE, 2 * 1024)
-                .with(AttributeIndexConfig.ATTRIBUTE_SEGMENT_ROLLING_SIZE, 1000)
-                .build();
-
-        private static final WriterConfig DEFAULT_WRITER_CONFIG = WriterConfig
-                .builder()
-                .with(WriterConfig.FLUSH_THRESHOLD_BYTES, 1)
-                .with(WriterConfig.FLUSH_ATTRIBUTES_THRESHOLD, 3)
-                .with(WriterConfig.FLUSH_THRESHOLD_MILLIS, 25L)
-                .with(WriterConfig.MIN_READ_TIMEOUT_MILLIS, 10L)
-                .with(WriterConfig.MAX_READ_TIMEOUT_MILLIS, 250L)
-                .build();
-
-        public DurableDataLogFactory dataLogFactory;
-        public final ReadIndexFactory readIndexFactory;
-        public final AttributeIndexFactory attributeIndexFactory;
-        public final WriterFactory writerFactory;
-        public final CacheStorage cacheStorage;
-        public final CacheManager cacheManager;
+        private final ReadIndexFactory readIndexFactory;
+        private final AttributeIndexFactory attributeIndexFactory;
+        private final WriterFactory writerFactory;
+        private final CacheStorage cacheStorage;
+        private final CacheManager cacheManager;
 
         ContainerContext(ScheduledExecutorService scheduledExecutorService) {
             this.cacheStorage = new DirectMemoryCache(Integer.MAX_VALUE / 5);

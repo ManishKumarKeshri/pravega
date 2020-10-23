@@ -30,7 +30,7 @@ public abstract class AbstractUserCommandTest {
 
     @BeforeClass
     public static void setUp() throws Exception {
-        SETUP_UTILS.startAllServices();
+        SETUP_UTILS.startAllServices(null);
         InteractiveConfig interactiveConfig = InteractiveConfig.getDefault();
         interactiveConfig.setControllerUri(SETUP_UTILS.getControllerUri().toString());
         interactiveConfig.setDefaultSegmentCount(4);

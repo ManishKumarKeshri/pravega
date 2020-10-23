@@ -214,8 +214,16 @@ public final class NameUtils {
         return segmentName.endsWith(ATTRIBUTE_SUFFIX);
     }
 
-    public static boolean isMetadataSegment(String segmentName) {
-        return segmentName.equals("_system/containers/metadata_0");
+    /**
+     * Checks if the given segment is a container metadata segment or not for the given container Id.
+     *
+     * @param segmentName   The name of the segment to be checked.
+     * @param containerId   The id of the Container.
+     * @return              True if the segment is a container metadata segment for that container Id, false otherwise.
+     */
+    public static boolean isMetadataSegment(String segmentName, int containerId) {
+        Preconditions.checkArgument(containerId >= 0, "containerId must be a non-negative number.");
+        return segmentName.equals(String.format(METADATA_SEGMENT_NAME_FORMAT, containerId));
     }
 
     /**
