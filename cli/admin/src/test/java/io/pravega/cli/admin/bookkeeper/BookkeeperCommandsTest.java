@@ -69,7 +69,6 @@ public class BookkeeperCommandsTest extends BookKeeperClusterTestCase {
         Properties bkProperties = new Properties();
         bkProperties.setProperty("pravegaservice.container.count", "4");
         bkProperties.setProperty("pravegaservice.zk.connect.uri", zkUtil.getZooKeeperConnectString());
-        log.info("zk connect uri = {}", zkUtil.getZooKeeperConnectString());
         bkProperties.setProperty("bookkeeper.ledger.path", "/ledgers");
         bkProperties.setProperty("bookkeeper.zk.metadata.path", "ledgers");
         bkProperties.setProperty("pravegaservice.clusterName", "");
