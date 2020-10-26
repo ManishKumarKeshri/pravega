@@ -130,6 +130,18 @@ public class StreamSegmentNameUtilsTests {
                 () -> NameUtils.getMetadataSegmentName(-1),
                 ex -> ex instanceof IllegalArgumentException);
     }
+
+    @Test
+    public void testIsMetadataSegmentName() {
+        Assert.assertTrue(NameUtils.isMetadataSegment("_system/containers/metadata_123", 123));
+        Assert.assertFalse(NameUtils.isMetadataSegment("_system/containers/metadata_123", 321));
+        Assert.assertFalse(NameUtils.isMetadataSegment("_system/containers/xyz", 123));
+
+        AssertExtensions.assertThrows(
+                "getMetadataSegmentName allowed negative container ids.",
+                () -> NameUtils.isMetadataSegment("_system/containers/xyz", -1),
+                ex -> ex instanceof IllegalArgumentException);
+    }
     
     @Test
     public void testTableSegmentName() {
