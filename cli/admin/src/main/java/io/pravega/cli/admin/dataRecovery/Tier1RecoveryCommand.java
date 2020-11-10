@@ -35,6 +35,7 @@ import io.pravega.segmentstore.server.tables.ContainerTableExtensionImpl;
 import io.pravega.segmentstore.server.writer.StorageWriterFactory;
 import io.pravega.segmentstore.server.writer.WriterConfig;
 import io.pravega.segmentstore.storage.DurableDataLogException;
+import io.pravega.segmentstore.storage.DurableDataLogFactory;
 import io.pravega.segmentstore.storage.Storage;
 import io.pravega.segmentstore.storage.StorageFactory;
 import io.pravega.segmentstore.storage.cache.CacheStorage;
@@ -63,6 +64,7 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
     private final ScheduledExecutorService executorService = ExecutorServiceHelpers.newScheduledThreadPool(100, "recoveryProcessor");
     private final int containerCount;
     private final StorageFactory storageFactory;
+    private DurableDataLogFactory dataLogFactory;
 
     /**
      * Creates an instance of Tier1RecoveryCommand class.
@@ -95,10 +97,9 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
                 .build().getConfig(BookKeeperConfig::builder);
         @Cleanup
         val zkClient = createZKClient();
-        @Cleanup
-        val factory = new BookKeeperLogFactory(bkConfig, zkClient, executorService);
+        this.dataLogFactory = new BookKeeperLogFactory(bkConfig, zkClient, executorService);
         try {
-            factory.initialize();
+            this.dataLogFactory.initialize();
         } catch (DurableDataLogException ex) {
             zkClient.close();
             throw ex;
@@ -111,7 +112,7 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
 
         // Start debug segment containers
         @Cleanup
-        ContainerContext context = createContainerContext(executorService, this.storageFactory, factory, config);
+        ContainerContext context = createContainerContext(executorService, this.storageFactory, this.dataLogFactory, config);
         Map<Integer, DebugStreamSegmentContainer> debugStreamSegmentContainerMap = createContainers(context, this.containerCount, storage);
         output(Level.INFO, "Debug segment containers started.");
 
@@ -164,7 +165,7 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
     }
 
     public static ContainerContext createContainerContext(ScheduledExecutorService scheduledExecutorService, StorageFactory storageFactory,
-                                                          BookKeeperLogFactory bookKeeperLogFactory, ContainerConfig containerConfig) {
+                                                          DurableDataLogFactory bookKeeperLogFactory, ContainerConfig containerConfig) {
         return new ContainerContext(scheduledExecutorService, storageFactory, bookKeeperLogFactory, containerConfig);
     }
 
@@ -202,7 +203,7 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
                 .build();
 
         ContainerContext(ScheduledExecutorService scheduledExecutorService, StorageFactory storageFactory,
-                         BookKeeperLogFactory bookKeeperLogFactory, ContainerConfig containerConfig) {
+                         DurableDataLogFactory bookKeeperLogFactory, ContainerConfig containerConfig) {
             this.operationLogFactory = new DurableLogFactory(NO_TRUNCATIONS_DURABLE_LOG_CONFIG, bookKeeperLogFactory, scheduledExecutorService);
             this.cacheStorage = new DirectMemoryCache(Integer.MAX_VALUE);
             this.cacheManager = new CacheManager(CachePolicy.INFINITE, this.cacheStorage, scheduledExecutorService);
