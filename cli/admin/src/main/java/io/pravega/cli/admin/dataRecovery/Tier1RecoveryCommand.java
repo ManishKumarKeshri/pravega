@@ -116,7 +116,7 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         output(Level.INFO, "Debug segment containers started.");
 
         output(Level.INFO, "Recovering all segments...");
-        ContainerRecoveryUtils.recoverAllSegments(storage, debugStreamSegmentContainerMap, executorService);
+        ContainerRecoveryUtils.recoverAllSegments(storage, debugStreamSegmentContainerMap, executorService, TIMEOUT);
         output(Level.INFO, "All segments recovered.");
 
         // Update core attributes from the backUp Metadata segments
@@ -177,12 +177,12 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         private final WriterFactory writerFactory;
         private final CacheStorage cacheStorage;
         private final CacheManager cacheManager;
-        private static final DurableLogConfig DEFAULT_DURABLE_LOG_CONFIG = DurableLogConfig
+        // DL config that can be used to simulate no DurableLog truncations.
+        private static final DurableLogConfig NO_TRUNCATIONS_DURABLE_LOG_CONFIG = DurableLogConfig
                 .builder()
-                .with(DurableLogConfig.CHECKPOINT_MIN_COMMIT_COUNT, 10)
-                .with(DurableLogConfig.CHECKPOINT_COMMIT_COUNT, 100)
-                .with(DurableLogConfig.CHECKPOINT_TOTAL_COMMIT_LENGTH, 10 * 1024 * 1024L)
-                .with(DurableLogConfig.START_RETRY_DELAY_MILLIS, 20)
+                .with(DurableLogConfig.CHECKPOINT_MIN_COMMIT_COUNT, 10000)
+                .with(DurableLogConfig.CHECKPOINT_COMMIT_COUNT, 50000)
+                .with(DurableLogConfig.CHECKPOINT_TOTAL_COMMIT_LENGTH, 1024 * 1024 * 1024L)
                 .build();
         private static final ReadIndexConfig DEFAULT_READ_INDEX_CONFIG = ReadIndexConfig.builder().with(ReadIndexConfig.STORAGE_READ_ALIGNMENT, 1024).build();
 
@@ -192,22 +192,23 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
                 .with(AttributeIndexConfig.ATTRIBUTE_SEGMENT_ROLLING_SIZE, 1000)
                 .build();
 
-        private static final WriterConfig DEFAULT_WRITER_CONFIG = WriterConfig
+        private static final WriterConfig INFREQUENT_FLUSH_WRITER_CONFIG = WriterConfig
                 .builder()
-                .with(WriterConfig.FLUSH_THRESHOLD_BYTES, 1)
-                .with(WriterConfig.FLUSH_THRESHOLD_MILLIS, 25L)
-                .with(WriterConfig.MIN_READ_TIMEOUT_MILLIS, 10L)
-                .with(WriterConfig.MAX_READ_TIMEOUT_MILLIS, 250L)
+                .with(WriterConfig.FLUSH_THRESHOLD_BYTES, 1024 * 1024 * 1024)
+                .with(WriterConfig.FLUSH_ATTRIBUTES_THRESHOLD, 3000)
+                .with(WriterConfig.FLUSH_THRESHOLD_MILLIS, 250000L)
+                .with(WriterConfig.MIN_READ_TIMEOUT_MILLIS, 100L)
+                .with(WriterConfig.MAX_READ_TIMEOUT_MILLIS, 500L)
                 .build();
 
         ContainerContext(ScheduledExecutorService scheduledExecutorService, StorageFactory storageFactory,
                          BookKeeperLogFactory bookKeeperLogFactory, ContainerConfig containerConfig) {
-            this.operationLogFactory = new DurableLogFactory(DEFAULT_DURABLE_LOG_CONFIG, bookKeeperLogFactory, scheduledExecutorService);
+            this.operationLogFactory = new DurableLogFactory(NO_TRUNCATIONS_DURABLE_LOG_CONFIG, bookKeeperLogFactory, scheduledExecutorService);
             this.cacheStorage = new DirectMemoryCache(Integer.MAX_VALUE);
             this.cacheManager = new CacheManager(CachePolicy.INFINITE, this.cacheStorage, scheduledExecutorService);
             this.readIndexFactory = new ContainerReadIndexFactory(DEFAULT_READ_INDEX_CONFIG, this.cacheManager, scheduledExecutorService);
             this.attributeIndexFactory = new ContainerAttributeIndexFactoryImpl(DEFAULT_ATTRIBUTE_INDEX_CONFIG, this.cacheManager, scheduledExecutorService);
-            this.writerFactory = new StorageWriterFactory(DEFAULT_WRITER_CONFIG, scheduledExecutorService);
+            this.writerFactory = new StorageWriterFactory(INFREQUENT_FLUSH_WRITER_CONFIG, scheduledExecutorService);
             this.containerFactory = new StreamSegmentContainerFactory(containerConfig, this.operationLogFactory,
                     this.readIndexFactory, this.attributeIndexFactory, this.writerFactory, storageFactory,
                     this::createContainerExtensions, scheduledExecutorService);
