@@ -65,13 +65,13 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand implements AutoClo
     private final int containerCount;
     private final StorageFactory storageFactory;
     private DurableDataLogFactory dataLogFactory;
-    private final StreamSegmentContainerFactory containerFactory;
-    private final OperationLogFactory operationLogFactory;
-    private final ReadIndexFactory readIndexFactory;
-    private final AttributeIndexFactory attributeIndexFactory;
-    private final WriterFactory writerFactory;
-    private final CacheStorage cacheStorage;
-    private final CacheManager cacheManager;
+    private StreamSegmentContainerFactory containerFactory;
+    private OperationLogFactory operationLogFactory;
+    private ReadIndexFactory readIndexFactory;
+    private AttributeIndexFactory attributeIndexFactory;
+    private WriterFactory writerFactory;
+    private CacheStorage cacheStorage;
+    private CacheManager cacheManager;
     // DL config that can be used to simulate no DurableLog truncations.
     private static final DurableLogConfig NO_TRUNCATIONS_DURABLE_LOG_CONFIG = DurableLogConfig
             .builder()
@@ -105,7 +105,15 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand implements AutoClo
         super(args);
         this.containerCount = getServiceConfig().getContainerCount();
         this.storageFactory = createStorageFactory(executorService);
+    }
 
+    private Map<Class<? extends SegmentContainerExtension>, SegmentContainerExtension> createContainerExtensions(
+            SegmentContainer container, ScheduledExecutorService executor) {
+        return Collections.singletonMap(ContainerTableExtension.class, new ContainerTableExtensionImpl(container, this.cacheManager, executor));
+    }
+
+    @Override
+    public void execute() throws Exception {
         val config = getCommandArgs().getState().getConfigBuilder().build().getConfig(ContainerConfig::builder);
 
         // Start a zk client and create a bookKeeperLogFactory
@@ -132,14 +140,7 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand implements AutoClo
         this.containerFactory = new StreamSegmentContainerFactory(config, this.operationLogFactory,
                 this.readIndexFactory, this.attributeIndexFactory, this.writerFactory, this.storageFactory,
                 this::createContainerExtensions, executorService);
-    }
 
-    private Map<Class<? extends SegmentContainerExtension>, SegmentContainerExtension> createContainerExtensions(
-            SegmentContainer container, ScheduledExecutorService executor) {
-        return Collections.singletonMap(ContainerTableExtension.class, new ContainerTableExtensionImpl(container, this.cacheManager, executor));
-    }
-
-    public void execute() throws Exception {
         // set up logging
         setLogging(descriptor().getName());
         output(Level.INFO, "Container Count = %d", this.containerCount);
