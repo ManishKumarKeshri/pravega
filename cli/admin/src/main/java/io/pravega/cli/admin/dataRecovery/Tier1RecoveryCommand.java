@@ -170,6 +170,7 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand implements AutoClo
 
         // Waits for metadata segments to be flushed to LTS and then stops the debug segment containers
         stopDebugSegmentContainersPostFlush(debugStreamSegmentContainerMap);
+        zkClient.close();
         output(Level.INFO, "Segments have been recovered.");
         output(Level.INFO, "Recovery Done!");
     }
