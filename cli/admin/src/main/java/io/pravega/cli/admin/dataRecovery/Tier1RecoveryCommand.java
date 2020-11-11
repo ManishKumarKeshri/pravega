@@ -57,7 +57,7 @@ import java.util.logging.Level;
 /**
  * Loads the storage instance, recovers all segments from there.
  */
-public class Tier1RecoveryCommand extends DataRecoveryCommand {
+public class Tier1RecoveryCommand extends DataRecoveryCommand implements AutoCloseable {
     private static final int CONTAINER_EPOCH = 1;
     private static final Duration TIMEOUT = Duration.ofMillis(100 * 1000);
 
@@ -65,6 +65,36 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
     private final int containerCount;
     private final StorageFactory storageFactory;
     private DurableDataLogFactory dataLogFactory;
+    private final StreamSegmentContainerFactory containerFactory;
+    private final OperationLogFactory operationLogFactory;
+    private final ReadIndexFactory readIndexFactory;
+    private final AttributeIndexFactory attributeIndexFactory;
+    private final WriterFactory writerFactory;
+    private final CacheStorage cacheStorage;
+    private final CacheManager cacheManager;
+    // DL config that can be used to simulate no DurableLog truncations.
+    private static final DurableLogConfig NO_TRUNCATIONS_DURABLE_LOG_CONFIG = DurableLogConfig
+            .builder()
+            .with(DurableLogConfig.CHECKPOINT_MIN_COMMIT_COUNT, 10000)
+            .with(DurableLogConfig.CHECKPOINT_COMMIT_COUNT, 50000)
+            .with(DurableLogConfig.CHECKPOINT_TOTAL_COMMIT_LENGTH, 1024 * 1024 * 1024L)
+            .build();
+    private static final ReadIndexConfig DEFAULT_READ_INDEX_CONFIG = ReadIndexConfig.builder().with(ReadIndexConfig.STORAGE_READ_ALIGNMENT, 1024).build();
+
+    private static final AttributeIndexConfig DEFAULT_ATTRIBUTE_INDEX_CONFIG = AttributeIndexConfig
+            .builder()
+            .with(AttributeIndexConfig.MAX_INDEX_PAGE_SIZE, 2 * 1024)
+            .with(AttributeIndexConfig.ATTRIBUTE_SEGMENT_ROLLING_SIZE, 1000)
+            .build();
+
+    private static final WriterConfig INFREQUENT_FLUSH_WRITER_CONFIG = WriterConfig
+            .builder()
+            .with(WriterConfig.FLUSH_THRESHOLD_BYTES, 1024 * 1024 * 1024)
+            .with(WriterConfig.FLUSH_ATTRIBUTES_THRESHOLD, 3000)
+            .with(WriterConfig.FLUSH_THRESHOLD_MILLIS, 250000L)
+            .with(WriterConfig.MIN_READ_TIMEOUT_MILLIS, 100L)
+            .with(WriterConfig.MAX_READ_TIMEOUT_MILLIS, 500L)
+            .build();
 
     /**
      * Creates an instance of Tier1RecoveryCommand class.
@@ -75,17 +105,6 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         super(args);
         this.containerCount = getServiceConfig().getContainerCount();
         this.storageFactory = createStorageFactory(executorService);
-    }
-
-    public void execute() throws Exception {
-        // set up logging
-        setLogging(descriptor().getName());
-        output(Level.INFO, "Container Count = %d", this.containerCount);
-
-        @Cleanup
-        Storage storage = this.storageFactory.createStorageAdapter();
-        storage.initialize(CONTAINER_EPOCH);
-        output(Level.INFO, "Loaded %s Storage.", getServiceConfig().getStorageImplementation().toString());
 
         val config = getCommandArgs().getState().getConfigBuilder().build().getConfig(ContainerConfig::builder);
 
@@ -101,8 +120,34 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
             this.dataLogFactory.initialize();
         } catch (DurableDataLogException ex) {
             zkClient.close();
-            throw ex;
+            ex.printStackTrace();
         }
+
+        this.operationLogFactory = new DurableLogFactory(NO_TRUNCATIONS_DURABLE_LOG_CONFIG, this.dataLogFactory, executorService);
+        this.cacheStorage = new DirectMemoryCache(Integer.MAX_VALUE);
+        this.cacheManager = new CacheManager(CachePolicy.INFINITE, this.cacheStorage, executorService);
+        this.readIndexFactory = new ContainerReadIndexFactory(DEFAULT_READ_INDEX_CONFIG, this.cacheManager, executorService);
+        this.attributeIndexFactory = new ContainerAttributeIndexFactoryImpl(DEFAULT_ATTRIBUTE_INDEX_CONFIG, this.cacheManager, executorService);
+        this.writerFactory = new StorageWriterFactory(INFREQUENT_FLUSH_WRITER_CONFIG, executorService);
+        this.containerFactory = new StreamSegmentContainerFactory(config, this.operationLogFactory,
+                this.readIndexFactory, this.attributeIndexFactory, this.writerFactory, this.storageFactory,
+                this::createContainerExtensions, executorService);
+    }
+
+    private Map<Class<? extends SegmentContainerExtension>, SegmentContainerExtension> createContainerExtensions(
+            SegmentContainer container, ScheduledExecutorService executor) {
+        return Collections.singletonMap(ContainerTableExtension.class, new ContainerTableExtensionImpl(container, this.cacheManager, executor));
+    }
+
+    public void execute() throws Exception {
+        // set up logging
+        setLogging(descriptor().getName());
+        output(Level.INFO, "Container Count = %d", this.containerCount);
+
+        @Cleanup
+        Storage storage = this.storageFactory.createStorageAdapter();
+        storage.initialize(CONTAINER_EPOCH);
+        output(Level.INFO, "Loaded %s Storage.", getServiceConfig().getStorageImplementation().toString());
 
         output(Level.INFO, "Starting recovery...");
         // create back up of metadata segments
@@ -110,9 +155,7 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
                 this.containerCount, executorService, TIMEOUT);
 
         // Start debug segment containers
-        @Cleanup
-        ContainerContext context = createContainerContext(executorService, this.storageFactory, this.dataLogFactory, config);
-        Map<Integer, DebugStreamSegmentContainer> debugStreamSegmentContainerMap = createContainers(context, this.containerCount, storage);
+        Map<Integer, DebugStreamSegmentContainer> debugStreamSegmentContainerMap = createContainers();
         output(Level.INFO, "Debug segment containers started.");
 
         output(Level.INFO, "Recovering all segments...");
@@ -148,14 +191,14 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
     }
 
     // Creates debug segment container instances, puts them in a map and returns it.
-    private Map<Integer, DebugStreamSegmentContainer> createContainers(ContainerContext context, int containerCount, Storage storage) {
+    private Map<Integer, DebugStreamSegmentContainer> createContainers() {
         // Start a debug segment container corresponding to the given container Id and put it in the Hashmap with the Id.
         Map<Integer, DebugStreamSegmentContainer> debugStreamSegmentContainerMap = new HashMap<>();
 
         // Create a debug segment container instances using a
-        for (int containerId = 0; containerId < containerCount; containerId++) {
+        for (int containerId = 0; containerId < this.containerCount; containerId++) {
             DebugStreamSegmentContainer debugStreamSegmentContainer = (DebugStreamSegmentContainer)
-                    context.containerFactory.createDebugStreamSegmentContainer(containerId);
+                    this.containerFactory.createDebugStreamSegmentContainer(containerId);
             Services.startAsync(debugStreamSegmentContainer, executorService).join();
             debugStreamSegmentContainerMap.put(containerId, debugStreamSegmentContainer);
             output(Level.FINE, "Container %d started.", containerId);
@@ -163,67 +206,13 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         return debugStreamSegmentContainerMap;
     }
 
-    public static ContainerContext createContainerContext(ScheduledExecutorService scheduledExecutorService, StorageFactory storageFactory,
-                                                          DurableDataLogFactory bookKeeperLogFactory, ContainerConfig containerConfig) {
-        return new ContainerContext(scheduledExecutorService, storageFactory, bookKeeperLogFactory, containerConfig);
-    }
-
-
-    public static class ContainerContext implements AutoCloseable {
-        private final StreamSegmentContainerFactory containerFactory;
-        private final OperationLogFactory operationLogFactory;
-        private final ReadIndexFactory readIndexFactory;
-        private final AttributeIndexFactory attributeIndexFactory;
-        private final WriterFactory writerFactory;
-        private final CacheStorage cacheStorage;
-        private final CacheManager cacheManager;
-        // DL config that can be used to simulate no DurableLog truncations.
-        private static final DurableLogConfig NO_TRUNCATIONS_DURABLE_LOG_CONFIG = DurableLogConfig
-                .builder()
-                .with(DurableLogConfig.CHECKPOINT_MIN_COMMIT_COUNT, 10000)
-                .with(DurableLogConfig.CHECKPOINT_COMMIT_COUNT, 50000)
-                .with(DurableLogConfig.CHECKPOINT_TOTAL_COMMIT_LENGTH, 1024 * 1024 * 1024L)
-                .build();
-        private static final ReadIndexConfig DEFAULT_READ_INDEX_CONFIG = ReadIndexConfig.builder().with(ReadIndexConfig.STORAGE_READ_ALIGNMENT, 1024).build();
-
-        private static final AttributeIndexConfig DEFAULT_ATTRIBUTE_INDEX_CONFIG = AttributeIndexConfig
-                .builder()
-                .with(AttributeIndexConfig.MAX_INDEX_PAGE_SIZE, 2 * 1024)
-                .with(AttributeIndexConfig.ATTRIBUTE_SEGMENT_ROLLING_SIZE, 1000)
-                .build();
-
-        private static final WriterConfig INFREQUENT_FLUSH_WRITER_CONFIG = WriterConfig
-                .builder()
-                .with(WriterConfig.FLUSH_THRESHOLD_BYTES, 1024 * 1024 * 1024)
-                .with(WriterConfig.FLUSH_ATTRIBUTES_THRESHOLD, 3000)
-                .with(WriterConfig.FLUSH_THRESHOLD_MILLIS, 250000L)
-                .with(WriterConfig.MIN_READ_TIMEOUT_MILLIS, 100L)
-                .with(WriterConfig.MAX_READ_TIMEOUT_MILLIS, 500L)
-                .build();
-
-        ContainerContext(ScheduledExecutorService scheduledExecutorService, StorageFactory storageFactory,
-                         DurableDataLogFactory bookKeeperLogFactory, ContainerConfig containerConfig) {
-            this.operationLogFactory = new DurableLogFactory(NO_TRUNCATIONS_DURABLE_LOG_CONFIG, bookKeeperLogFactory, scheduledExecutorService);
-            this.cacheStorage = new DirectMemoryCache(Integer.MAX_VALUE);
-            this.cacheManager = new CacheManager(CachePolicy.INFINITE, this.cacheStorage, scheduledExecutorService);
-            this.readIndexFactory = new ContainerReadIndexFactory(DEFAULT_READ_INDEX_CONFIG, this.cacheManager, scheduledExecutorService);
-            this.attributeIndexFactory = new ContainerAttributeIndexFactoryImpl(DEFAULT_ATTRIBUTE_INDEX_CONFIG, this.cacheManager, scheduledExecutorService);
-            this.writerFactory = new StorageWriterFactory(INFREQUENT_FLUSH_WRITER_CONFIG, scheduledExecutorService);
-            this.containerFactory = new StreamSegmentContainerFactory(containerConfig, this.operationLogFactory,
-                    this.readIndexFactory, this.attributeIndexFactory, this.writerFactory, storageFactory,
-                    this::createContainerExtensions, scheduledExecutorService);
-        }
-
-        private Map<Class<? extends SegmentContainerExtension>, SegmentContainerExtension> createContainerExtensions(
-                SegmentContainer container, ScheduledExecutorService executor) {
-            return Collections.singletonMap(ContainerTableExtension.class, new ContainerTableExtensionImpl(container, this.cacheManager, executor));
-        }
-
-        @Override
-        public void close() {
-            this.readIndexFactory.close();
-            this.cacheManager.close();
-            this.cacheStorage.close();
+    @Override
+    public void close() {
+        this.cacheManager.close();
+        this.cacheStorage.close();
+        this.readIndexFactory.close();
+        if (this.dataLogFactory != null) {
+            this.dataLogFactory.close();
         }
     }
 }
