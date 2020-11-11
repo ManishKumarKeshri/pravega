@@ -423,23 +423,29 @@ public class ContainerRecoveryUtils {
     public static Map<Integer, String> createBackUpMetadataSegments(Storage storage, int containerCount, ExecutorService executorService,
                                                                     Duration timeout)
             throws InterruptedException, ExecutionException, TimeoutException {
-        String fileSuffix = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
         Map<Integer, String> backUpMetadataSegments = new HashMap<>();
 
         val futures = new ArrayList<CompletableFuture<Void>>();
 
         for (int containerId = 0; containerId < containerCount; containerId++) {
-            String backUpMetadataSegment = NameUtils.getMetadataSegmentName(containerId) + fileSuffix;
+            String backUpMetadataSegment = "_system/containers/backupMetadataSegment_" + containerId;
             String backUpAttributeSegment = NameUtils.getAttributeSegmentName(backUpMetadataSegment);
             log.debug("Created '{}' as a back of metadata segment of container Id '{}'", backUpAttributeSegment, containerId);
 
             val finalContainerId = containerId;
-            futures.add(Futures.exceptionallyExpecting(
-                    ContainerRecoveryUtils.backUpMetadataAndAttributeSegments(storage, containerId,
-                            backUpMetadataSegment, backUpAttributeSegment, executorService, timeout)
-                            .thenAccept(x -> ContainerRecoveryUtils.deleteMetadataAndAttributeSegments(storage, finalContainerId, timeout)
-                                    .thenAccept(z -> backUpMetadataSegments.put(finalContainerId, backUpMetadataSegment))
-                            ), ex -> Exceptions.unwrap(ex) instanceof StreamSegmentNotExistsException, null));
+            boolean metadataSegmentExists = storage.exists(backUpMetadataSegment, timeout).join();
+
+            if (metadataSegmentExists) {
+                futures.add(ContainerRecoveryUtils.deleteMetadataAndAttributeSegments(storage, finalContainerId, timeout)
+                        .thenAccept(z -> backUpMetadataSegments.put(finalContainerId, backUpMetadataSegment)));
+            } else {
+                futures.add(Futures.exceptionallyExpecting(
+                        ContainerRecoveryUtils.backUpMetadataAndAttributeSegments(storage, containerId,
+                                backUpMetadataSegment, backUpAttributeSegment, executorService, timeout)
+                                .thenAccept(x -> ContainerRecoveryUtils.deleteMetadataAndAttributeSegments(storage, finalContainerId, timeout)
+                                        .thenAccept(z -> backUpMetadataSegments.put(finalContainerId, backUpMetadataSegment))
+                                ), ex -> Exceptions.unwrap(ex) instanceof StreamSegmentNotExistsException, null));
+            }
         }
         Futures.allOf(futures).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         return backUpMetadataSegments;
