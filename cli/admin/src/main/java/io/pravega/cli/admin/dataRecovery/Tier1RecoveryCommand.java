@@ -95,6 +95,7 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand implements AutoClo
             .with(WriterConfig.MIN_READ_TIMEOUT_MILLIS, 100L)
             .with(WriterConfig.MAX_READ_TIMEOUT_MILLIS, 500L)
             .build();
+    private Storage storage;
 
     /**
      * Creates an instance of Tier1RecoveryCommand class.
@@ -105,15 +106,7 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand implements AutoClo
         super(args);
         this.containerCount = getServiceConfig().getContainerCount();
         this.storageFactory = createStorageFactory(executorService);
-    }
 
-    private Map<Class<? extends SegmentContainerExtension>, SegmentContainerExtension> createContainerExtensions(
-            SegmentContainer container, ScheduledExecutorService executor) {
-        return Collections.singletonMap(ContainerTableExtension.class, new ContainerTableExtensionImpl(container, this.cacheManager, executor));
-    }
-
-    @Override
-    public void execute() throws Exception {
         val config = getCommandArgs().getState().getConfigBuilder().build().getConfig(ContainerConfig::builder);
 
         // Start a zk client and create a bookKeeperLogFactory
@@ -140,13 +133,20 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand implements AutoClo
         this.containerFactory = new StreamSegmentContainerFactory(config, this.operationLogFactory,
                 this.readIndexFactory, this.attributeIndexFactory, this.writerFactory, this.storageFactory,
                 this::createContainerExtensions, executorService);
+    }
 
+    private Map<Class<? extends SegmentContainerExtension>, SegmentContainerExtension> createContainerExtensions(
+            SegmentContainer container, ScheduledExecutorService executor) {
+        return Collections.singletonMap(ContainerTableExtension.class, new ContainerTableExtensionImpl(container, this.cacheManager, executor));
+    }
+
+    @Override
+    public void execute() throws Exception {
         // set up logging
         setLogging(descriptor().getName());
         output(Level.INFO, "Container Count = %d", this.containerCount);
 
-        @Cleanup
-        Storage storage = this.storageFactory.createStorageAdapter();
+        this.storage = this.storageFactory.createStorageAdapter();
         storage.initialize(CONTAINER_EPOCH);
         output(Level.INFO, "Loaded %s Storage.", getServiceConfig().getStorageImplementation().toString());
 
@@ -170,7 +170,7 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand implements AutoClo
 
         // Waits for metadata segments to be flushed to LTS and then stops the debug segment containers
         stopDebugSegmentContainersPostFlush(debugStreamSegmentContainerMap);
-        zkClient.close();
+
         output(Level.INFO, "Segments have been recovered.");
         output(Level.INFO, "Recovery Done!");
     }
@@ -216,5 +216,6 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand implements AutoClo
         if (this.dataLogFactory != null) {
             this.dataLogFactory.close();
         }
+        storage.close();
     }
 }
