@@ -77,7 +77,6 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         this.storageFactory = createStorageFactory(executorService);
     }
 
-    @Override
     public void execute() throws Exception {
         // set up logging
         setLogging(descriptor().getName());
