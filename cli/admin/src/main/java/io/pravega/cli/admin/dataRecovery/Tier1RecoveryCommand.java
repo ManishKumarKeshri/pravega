@@ -110,9 +110,8 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand implements AutoClo
         val config = getCommandArgs().getState().getConfigBuilder().build().getConfig(ContainerConfig::builder);
 
         // Start a zk client and create a bookKeeperLogFactory
-        val serviceConfig = getServiceConfig();
         val bkConfig = getCommandArgs().getState().getConfigBuilder()
-                .include(BookKeeperConfig.builder().with(BookKeeperConfig.ZK_ADDRESS, serviceConfig.getZkURL()))
+                .include(BookKeeperConfig.builder().with(BookKeeperConfig.ZK_ADDRESS, getServiceConfig().getZkURL()))
                 .build().getConfig(BookKeeperConfig::builder);
 
         val zkClient = createZKClient();
