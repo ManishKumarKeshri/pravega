@@ -64,14 +64,14 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand implements AutoClo
     private final ScheduledExecutorService executorService = ExecutorServiceHelpers.newScheduledThreadPool(100, "recoveryProcessor");
     private final int containerCount;
     private final StorageFactory storageFactory;
-    private DurableDataLogFactory dataLogFactory;
-    private StreamSegmentContainerFactory containerFactory;
-    private OperationLogFactory operationLogFactory;
-    private ReadIndexFactory readIndexFactory;
-    private AttributeIndexFactory attributeIndexFactory;
-    private WriterFactory writerFactory;
-    private CacheStorage cacheStorage;
-    private CacheManager cacheManager;
+    private final DurableDataLogFactory dataLogFactory;
+    private final StreamSegmentContainerFactory containerFactory;
+    private final OperationLogFactory operationLogFactory;
+    private final ReadIndexFactory readIndexFactory;
+    private final AttributeIndexFactory attributeIndexFactory;
+    private final WriterFactory writerFactory;
+    private final CacheStorage cacheStorage;
+    private final CacheManager cacheManager;
     // DL config that can be used to simulate no DurableLog truncations.
     private static final DurableLogConfig NO_TRUNCATIONS_DURABLE_LOG_CONFIG = DurableLogConfig
             .builder()

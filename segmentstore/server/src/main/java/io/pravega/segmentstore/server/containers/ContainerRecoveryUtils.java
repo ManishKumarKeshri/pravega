@@ -428,7 +428,7 @@ public class ContainerRecoveryUtils {
         val futures = new ArrayList<CompletableFuture<Void>>();
 
         for (int containerId = 0; containerId < containerCount; containerId++) {
-            String backUpMetadataSegment = "_system/containers/backupMetadataSegment_" + containerId;
+            String backUpMetadataSegment = "backupMetadataSegment_" + containerId;
             String backUpAttributeSegment = NameUtils.getAttributeSegmentName(backUpMetadataSegment);
             log.debug("Created '{}' as a back of metadata segment of container Id '{}'", backUpAttributeSegment, containerId);
 
