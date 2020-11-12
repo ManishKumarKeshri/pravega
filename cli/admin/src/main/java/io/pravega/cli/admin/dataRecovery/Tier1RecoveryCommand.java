@@ -181,6 +181,8 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand implements AutoClo
         for (val debugSegmentContainer : debugStreamSegmentContainerMap.values()) {
             output(Level.FINE, "Waiting for metadata segment of container %d to be flushed to the Long-Term storage.", debugSegmentContainer.getId());
             debugSegmentContainer.flushToStorage(TIMEOUT).join();
+        }
+        for (val debugSegmentContainer : debugStreamSegmentContainerMap.values()) {
             Services.stopAsync(debugSegmentContainer, executorService).get(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
             output(Level.FINE, "Stopping debug segment container %d.", debugSegmentContainer.getId());
             debugSegmentContainer.close();
