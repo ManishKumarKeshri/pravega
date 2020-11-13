@@ -55,7 +55,7 @@ public abstract class DataRecoveryCommand extends AdminCommand {
      * @return                  A newly created {@link StorageFactory} instance.
      */
     StorageFactory createStorageFactory(ScheduledExecutorService executorService) {
-        ServiceBuilder.ConfigSetupHelper configSetupHelper = new ServiceBuilder.ConfigSetupHelper(getServiceBuilderConfig());
+        ServiceBuilder.ConfigSetupHelper configSetupHelper = new ServiceBuilder.ConfigSetupHelper(getCommandArgs().getState().getConfigBuilder().build());
         StorageLoader loader = new StorageLoader();
         return loader.load(configSetupHelper, getServiceConfig().getStorageImplementation().toString(),
                 getServiceConfig().getStorageLayout(), executorService);

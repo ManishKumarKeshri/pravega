@@ -113,13 +113,6 @@ public abstract class AdminCommand {
     }
 
     /**
-     * Creates a new instance of the ServiceConfig class from the shared AdminCommandState.
-     */
-    protected ServiceBuilderConfig getServiceBuilderConfig() {
-        return getCommandArgs().getState().getConfigBuilder().build();
-    }
-
-    /**
      * Creates a new instance of the CLIControllerConfig class from the shared AdminCommandState passed in via the Constructor.
      */
     protected CLIControllerConfig getCLIControllerConfig() {
