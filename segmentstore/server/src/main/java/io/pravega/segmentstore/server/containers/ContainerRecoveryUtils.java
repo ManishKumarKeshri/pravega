@@ -90,8 +90,12 @@ public class ContainerRecoveryUtils {
 
         log.info("Recovery started for all containers...");
         // Get all segments in the metadata store for each debug segment container instance.
-        Map<Integer, Set<String>> existingSegmentsMap = getExistingSegments(debugStreamSegmentContainersMap, executorService,
-                timeout);
+        Map<Integer, Set<String>> existingSegmentsMap = new HashMap<>();
+        try {
+            existingSegmentsMap = getExistingSegments(debugStreamSegmentContainersMap, executorService,
+                    timeout);
+        } catch (Exception e) {
+        }
 
         SegmentToContainerMapper segToConMapper = new SegmentToContainerMapper(containerCount);
 
@@ -112,21 +116,25 @@ public class ContainerRecoveryUtils {
                 continue;
             }
 
-            existingSegmentsMap.get(containerId).remove(currentSegment.getName());
+            if (existingSegmentsMap != null) {
+                existingSegmentsMap.get(containerId).remove(currentSegment.getName());
+            }
             futures.add(recoverSegment(debugStreamSegmentContainersMap.get(containerId), currentSegment, timeout));
         }
         Futures.allOf(futures).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
 
         futures.clear();
         // Delete segments which only exist in the container metadata, not in storage.
-        for (val existingSegmentsSetEntry : existingSegmentsMap.entrySet()) {
-            for (String segmentName : existingSegmentsSetEntry.getValue()) {
-                log.info("Deleting segment '{}' as it is not in the storage.", segmentName);
-                futures.add(debugStreamSegmentContainersMap.get(existingSegmentsSetEntry.getKey())
-                        .deleteStreamSegment(segmentName, timeout));
+        if (existingSegmentsMap != null) {
+            for (val existingSegmentsSetEntry : existingSegmentsMap.entrySet()) {
+                for (String segmentName : existingSegmentsSetEntry.getValue()) {
+                    log.info("Deleting segment '{}' as it is not in the storage.", segmentName);
+                    futures.add(debugStreamSegmentContainersMap.get(existingSegmentsSetEntry.getKey())
+                            .deleteStreamSegment(segmentName, timeout));
+                }
             }
+            Futures.allOf(futures).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         }
-        Futures.allOf(futures).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     /**

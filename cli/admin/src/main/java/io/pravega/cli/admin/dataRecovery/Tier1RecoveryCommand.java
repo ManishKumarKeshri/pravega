@@ -10,8 +10,13 @@
 package io.pravega.cli.admin.dataRecovery;
 
 import io.pravega.cli.admin.CommandArgs;
+import io.pravega.common.TimeoutTimer;
 import io.pravega.common.concurrent.ExecutorServiceHelpers;
+import io.pravega.common.concurrent.Futures;
 import io.pravega.common.concurrent.Services;
+import io.pravega.segmentstore.contracts.SegmentProperties;
+import io.pravega.segmentstore.contracts.StreamSegmentInformation;
+import io.pravega.segmentstore.contracts.StreamSegmentNotExistsException;
 import io.pravega.segmentstore.server.CacheManager;
 import io.pravega.segmentstore.server.CachePolicy;
 import io.pravega.segmentstore.server.OperationLogFactory;
@@ -47,11 +52,16 @@ import lombok.Cleanup;
 import lombok.val;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 
 /**
@@ -178,14 +188,17 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand implements AutoClo
     // the given storage.
     private void stopDebugSegmentContainersPostFlush(Map<Integer, DebugStreamSegmentContainer> debugStreamSegmentContainerMap)
             throws Exception {
-        for (val debugSegmentContainer : debugStreamSegmentContainerMap.values()) {
-            output(Level.FINE, "Waiting for metadata segment of container %d to be flushed to the Long-Term storage.", debugSegmentContainer.getId());
-            debugSegmentContainer.flushToStorage(TIMEOUT).join();
-        }
-        for (val debugSegmentContainer : debugStreamSegmentContainerMap.values()) {
-            Services.stopAsync(debugSegmentContainer, executorService).get(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
-            output(Level.FINE, "Stopping debug segment container %d.", debugSegmentContainer.getId());
-            debugSegmentContainer.close();
+        for (val debugSegmentContainerEntry : debugStreamSegmentContainerMap.entrySet()) {
+            output(Level.FINE, "Waiting for metadata segment of container %d to be flushed to the Long-Term storage.",
+                    debugSegmentContainerEntry.getKey());
+            String metadataSegmentName = NameUtils.getMetadataSegmentName(debugSegmentContainerEntry.getKey());
+            waitForSegmentsInStorage(Collections.singleton(metadataSegmentName), debugSegmentContainerEntry.getValue(), storage)
+                    .get(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            output(Level.FINE, metadataSegmentName + " flushed to the Long-Term Storage.");
+
+            Services.stopAsync(debugSegmentContainerEntry.getValue(), executorService).get(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            output(Level.FINE, "Stopping debug segment container %d.", debugSegmentContainerEntry.getKey());
+            debugSegmentContainerEntry.getValue().close();
         }
     }
 
@@ -218,5 +231,61 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand implements AutoClo
             this.dataLogFactory.close();
         }
         storage.close();
+    }
+
+    private CompletableFuture<Void> waitForSegmentsInStorage(Collection<String> segmentNames, DebugStreamSegmentContainer container,
+                                                             Storage storage) {
+        ArrayList<CompletableFuture<Void>> segmentsCompletion = new ArrayList<>();
+        for (String segmentName : segmentNames) {
+            SegmentProperties sp = container.getStreamSegmentInfo(segmentName, TIMEOUT).join();
+            segmentsCompletion.add(waitForSegmentInStorage(sp, storage));
+        }
+
+        return Futures.allOf(segmentsCompletion);
+    }
+
+    private CompletableFuture<Void> waitForSegmentInStorage(SegmentProperties sp, Storage storage) {
+        if (sp.getLength() == 0) {
+            // Empty segments may or may not exist in Storage, so don't bother complicating ourselves with this.
+            return CompletableFuture.completedFuture(null);
+        }
+
+        // We want to make sure that both the main segment and its attribute segment have been sync-ed to Storage. In case
+        // of the attribute segment, the only thing we can easily do is verify that it has been sealed when the main segment
+        // it is associated with has also been sealed.
+        String attributeSegmentName = NameUtils.getAttributeSegmentName(sp.getName());
+        TimeoutTimer timer = new TimeoutTimer(TIMEOUT);
+        AtomicBoolean tryAgain = new AtomicBoolean(true);
+        return Futures.loop(
+                tryAgain::get,
+                () -> {
+                    val segInfo = getStorageSegmentInfo(sp.getName(), timer, storage);
+                    val attrInfo = getStorageSegmentInfo(attributeSegmentName, timer, storage);
+                    return CompletableFuture.allOf(segInfo, attrInfo)
+                            .thenCompose(v -> {
+                                SegmentProperties storageProps = segInfo.join();
+                                SegmentProperties attrProps = attrInfo.join();
+                                if (sp.isSealed()) {
+                                    tryAgain.set(!storageProps.isSealed() || !(attrProps.isSealed() || attrProps.isDeleted()));
+                                } else {
+                                    tryAgain.set(sp.getLength() != storageProps.getLength());
+                                }
+
+                                if (tryAgain.get() && !timer.hasRemaining()) {
+                                    return Futures.<Void>failedFuture(new TimeoutException(
+                                            String.format("Segment %s did not complete in Storage in the allotted time.", sp.getName())));
+                                } else {
+                                    return Futures.delayedFuture(Duration.ofMillis(100), executorService);
+                                }
+                            });
+                },
+                executorService);
+    }
+
+    private CompletableFuture<SegmentProperties> getStorageSegmentInfo(String segmentName, TimeoutTimer timer, Storage storage) {
+        return Futures
+                .exceptionallyExpecting(storage.getStreamSegmentInfo(segmentName, timer.getRemaining()),
+                        ex -> ex instanceof StreamSegmentNotExistsException,
+                        StreamSegmentInformation.builder().name(segmentName).deleted(true).build());
     }
 }
