@@ -33,7 +33,7 @@ public class AdminCommandState implements AutoCloseable {
     public AdminCommandState() throws IOException {
         this.configBuilder = ServiceBuilderConfig.builder();
         try {
-            this.configBuilder.include(System.getProperty(ServiceBuilderConfig.CONFIG_FILE_PROPERTY_NAME, "config/admin-cli.properties"));
+            this.configBuilder.include(System.getProperty(ServiceBuilderConfig.CONFIG_FILE_PROPERTY_NAME, "admin-cli.properties"));
         } catch (FileNotFoundException ex) {
             // Nothing to do here.
         }
