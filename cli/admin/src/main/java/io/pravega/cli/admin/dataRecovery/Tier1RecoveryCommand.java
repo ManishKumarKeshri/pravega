@@ -163,7 +163,7 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
 //                TIMEOUT);
 
         // match old and new attributes
-        assertTrue(ContainerRecoveryUtils.matchAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService, TIMEOUT));
+        // assertTrue(ContainerRecoveryUtils.matchAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService, TIMEOUT));
 
         // Waits for metadata segments to be flushed to LTS and then stops the debug segment containers
         stopDebugSegmentContainersPostFlush(debugStreamSegmentContainerMap);
