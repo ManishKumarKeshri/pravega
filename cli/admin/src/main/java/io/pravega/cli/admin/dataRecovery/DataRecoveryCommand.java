@@ -14,6 +14,7 @@ import io.pravega.cli.admin.CommandArgs;
 import io.pravega.segmentstore.server.host.StorageLoader;
 import io.pravega.segmentstore.server.store.ServiceBuilder;
 import io.pravega.segmentstore.storage.StorageFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.text.DateFormat;
@@ -35,6 +36,7 @@ import static java.util.logging.Level.SEVERE;
 /**
  * Base for any data recovery related commands.
  */
+@Slf4j
 public abstract class DataRecoveryCommand extends AdminCommand {
     protected final static String COMPONENT = "storage";
     protected Logger logger;
