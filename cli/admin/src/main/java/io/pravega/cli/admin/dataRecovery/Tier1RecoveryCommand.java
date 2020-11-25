@@ -164,6 +164,12 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         ContainerRecoveryUtils.updateCoreAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService,
                 TIMEOUT);
 
+        for (val debugSegmentContainer : debugStreamSegmentContainerMap.values()) {
+            output(Level.FINE, "Waiting for metadata segment of container %d to be flushed to the Long-Term storage.",
+                    debugSegmentContainer.getId());
+            debugSegmentContainer.flushToStorage(TIMEOUT).join();
+        }
+
         // match old and new attributes
         output(Level.INFO, "Matching the attributes.");
         assertTrue(ContainerRecoveryUtils.matchAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService, TIMEOUT));
