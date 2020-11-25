@@ -28,6 +28,7 @@ import java.io.ByteArrayInputStream;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -35,11 +36,13 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -355,7 +358,7 @@ public class ContainerRecoveryUtils {
                             .collect(Collectors.toList());
                     log.info("Segment Name: {} Attributes Updates: {}", properties.getName(), attributeUpdates);
 
-                    // Update attributes for the current segment
+                    // Update attributes for the current segment if the segment exists
                     futures.add(Futures.exceptionallyExpecting(
                             container.updateAttributes(properties.getName(), attributeUpdates, timeout),
                             ex -> ex instanceof StreamSegmentNotExistsException, null));
@@ -365,6 +368,86 @@ public class ContainerRecoveryUtils {
             // Waiting for update attributes for all segments in each back up metadata segment.
             Futures.allOf(futures).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         }
+    }
+
+    public static boolean matchAttributes(Map<Integer, String> backUpMetadataSegments,
+                                            Map<Integer, DebugStreamSegmentContainer> containersMap,
+                                            ExecutorService executorService,
+                                            Duration timeout) throws Exception {
+        Preconditions.checkState(backUpMetadataSegments.size() == containersMap.size(), "The number of " +
+                "back-up metadata segments and containers should match.");
+
+        val args = IteratorArgs.builder().fetchTimeout(timeout).build();
+        SegmentToContainerMapper segToConMapper = new SegmentToContainerMapper(containersMap.size());
+
+        AtomicBoolean flag = new AtomicBoolean(true);
+
+        // Iterate through all back up metadata segments
+        for (val backUpMetadataSegmentEntry : backUpMetadataSegments.entrySet()) {
+            // Get the name of original metadata segment
+            val metadataSegment = NameUtils.getMetadataSegmentName(backUpMetadataSegmentEntry.getKey());
+
+            // Get the name of back up metadata segment
+            val backUpMetadataSegment = backUpMetadataSegmentEntry.getValue();
+
+            // Get the container for back up metadata segment
+            val containerForBackUpMetadataSegment = containersMap.get(segToConMapper.getContainerId(
+                    backUpMetadataSegment));
+            log.info("Back up container metadata segment name: {} and its container id: {}", backUpMetadataSegment,
+                    containerForBackUpMetadataSegment.getId());
+
+            // Get the container for segments inside back up metadata segment
+            val container = containersMap.get(backUpMetadataSegmentEntry.getKey());
+
+            // Get the iterator to iterate through all segments in the back up metadata segment
+            val tableExtension = containerForBackUpMetadataSegment.getExtension(ContainerTableExtension.class);
+            val entryIterator = tableExtension.entryIterator(backUpMetadataSegment, args)
+                    .get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+
+            // Iterating through all segments in the back up metadata segment
+            entryIterator.forEachRemaining(item -> {
+                for (val entry : item.getEntries()) {
+
+                    val segmentInfo = MetadataStore.SegmentInfo.deserialize(entry.getValue());
+                    val properties = segmentInfo.getProperties();
+
+                    // skip, if this is original metadata segment
+                    if (properties.getName().equals(metadataSegment)) {
+                        continue;
+                    }
+
+                    // Get the attributes for the current segment
+                    List<AttributeUpdate> originalAttributes = properties.getAttributes().entrySet().stream()
+                            .map(e -> new AttributeUpdate(e.getKey(), AttributeUpdateType.Replace, e.getValue()))
+                            .collect(Collectors.toList());
+
+                    Map<UUID, Long> expectedAttributes = new HashMap<>();
+                    applyAttributes(originalAttributes, expectedAttributes);
+                    log.info("Segment Name: {} Original Attributes: {}", properties.getName(), expectedAttributes);
+
+                    val newAttributes = Futures.exceptionallyExpecting(
+                            container.getAttributes(properties.getName(), expectedAttributes.keySet(),
+                                    true, timeout),
+                            ex -> ex instanceof StreamSegmentNotExistsException, null).join();
+
+                    log.info("Segment Name: {} New Attributes: {}", properties.getName(), newAttributes);
+
+                    if (newAttributes == null) {
+                        continue;
+                    }
+
+                    if (!expectedAttributes.equals(newAttributes)) {
+                        flag.set(false);
+                        break;
+                    }
+                }
+            }, executorService).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        }
+        return flag.get();
+    }
+
+    private static void applyAttributes(Collection<AttributeUpdate> updates, Map<UUID, Long> target) {
+        updates.forEach(au -> target.put(au.getAttributeId(), au.getValue()));
     }
 
     /**

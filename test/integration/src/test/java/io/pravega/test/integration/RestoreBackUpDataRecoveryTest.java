@@ -460,7 +460,7 @@ public class RestoreBackUpDataRecoveryTest extends ThreadPooledTestSuite {
         // Create a client to write events.
         try (val clientRunner = new ClientRunner(pravegaRunner.controllerRunner)) {
             // Write events.
-            writeEventsToStream(clientRunner.clientFactory, withTransaction);
+            writeEventsToStream(clientRunner.clientFactory, withTransaction, TOTAL_NUM_EVENTS);
         }
 
         pravegaRunner.controllerRunner.close(); // Shut down the controller
@@ -544,14 +544,14 @@ public class RestoreBackUpDataRecoveryTest extends ThreadPooledTestSuite {
     }
 
     // Writes events to the streams with/without transactions.
-    private void writeEventsToStream(ClientFactoryImpl clientFactory, boolean withTransaction)
+    private void writeEventsToStream(ClientFactoryImpl clientFactory, boolean withTransaction, int numEvents)
             throws TxnFailedException {
         if (withTransaction) {
             log.info("Writing transactional events on to stream: {}", STREAM1);
-            writeTransactionalEvents(STREAM1, clientFactory); // write events
+            writeTransactionalEvents(STREAM1, clientFactory, numEvents); // write events
         } else {
             log.info("Writing events on to stream: {}", STREAM1);
-            writeEvents(STREAM1, clientFactory); // write events
+            writeEvents(STREAM1, clientFactory, numEvents); // write events
         }
     }
 
@@ -603,7 +603,7 @@ public class RestoreBackUpDataRecoveryTest extends ThreadPooledTestSuite {
         // Create a client to write events.
         try (val clientRunner = new ClientRunner(pravegaRunner.controllerRunner)) {
             // Write events.
-            writeEventsToStream(clientRunner.clientFactory, true);
+            writeEventsToStream(clientRunner.clientFactory, true, TOTAL_NUM_EVENTS);
 
             // Create a reader for reading from the stream.
             EventStreamReader<String> reader = createReader(clientRunner.clientFactory, clientRunner.readerGroupManager,
@@ -668,6 +668,61 @@ public class RestoreBackUpDataRecoveryTest extends ThreadPooledTestSuite {
         }
     }
 
+    @Test(timeout = 180000)
+    public void testDurableDataLogFailRecoveryReadWrite() throws Exception {
+        int instanceId = 0;
+        int bookieCount = 1;
+        int containerCount = 4;
+        int eventsWrittenCount = RANDOM.nextInt(TOTAL_NUM_EVENTS);
+        // Creating a long term storage only once here.
+        this.storageFactory = new InMemoryStorageFactory(executorService());
+        log.info("Created a long term storage.");
+        // Start a new BK & ZK, segment store and controller
+        @Cleanup
+        PravegaRunner pravegaRunner = new PravegaRunner(instanceId++, bookieCount, containerCount, this.storageFactory);
+        // Create a stream for writing data
+        createScopeStream(pravegaRunner.controllerRunner.controller, SCOPE, STREAM1);
+        log.info("Created stream '{}'.", STREAM1);
+        // Create a client to write events.
+        try (val clientRunner = new ClientRunner(pravegaRunner.controllerRunner)) {
+            // Write events.
+            writeEventsToStream(clientRunner.clientFactory, true, eventsWrittenCount);
+        }
+        pravegaRunner.controllerRunner.close(); // Shut down the controller
+        // Flush DurableLog to Long Term Storage
+        ServiceBuilder.ComponentSetup componentSetup = new ServiceBuilder.ComponentSetup(pravegaRunner.segmentStoreRunner.serviceBuilder);
+        for (int containerId = 0; containerId < containerCount; containerId++) {
+            componentSetup.getContainerRegistry().getContainer(containerId).flushToStorage(TIMEOUT).join();
+        }
+        //
+        pravegaRunner.segmentStoreRunner.close(); // Shutdown SegmentStore
+        pravegaRunner.bookKeeperRunner.close(); // Shutdown BookKeeper & ZooKeeper
+        log.info("SegmentStore, BookKeeper & ZooKeeper shutdown");
+        // Get the long term storage from the running pravega instance
+        @Cleanup
+        Storage storage = new AsyncStorageWrapper(new RollingStorage(this.storageFactory.createSyncStorage(),
+                new SegmentRollingPolicy(DEFAULT_ROLLING_SIZE)), executorService());
+        Map<Integer, String> backUpMetadataSegments = ContainerRecoveryUtils.createBackUpMetadataSegments(storage, containerCount,
+                executorService(), TIMEOUT);
+        // start a new BookKeeper and ZooKeeper.
+        pravegaRunner.bookKeeperRunner = new BookKeeperRunner(instanceId++, bookieCount);
+        createBookKeeperLogFactory(pravegaRunner);
+        log.info("Started a new BookKeeper and ZooKeeper.");
+        // Recover segments
+        runRecovery(containerCount, storage, backUpMetadataSegments);
+        // Start a new segment store and controller
+        pravegaRunner.restartControllerAndSegmentStore(this.storageFactory, this.dataLogFactory);
+        log.info("Started segment store and controller again.");
+        // Create the client with new controller.
+        try (val clientRunner = new ClientRunner(pravegaRunner.controllerRunner)) {
+            // write some more events
+            writeEventsToStream(clientRunner.clientFactory, true, TOTAL_NUM_EVENTS - eventsWrittenCount);
+            // Try reading all events again to verify that the recovery was successful.
+            readEventsFromStream(clientRunner.clientFactory, clientRunner.readerGroupManager);
+            log.info("Read all events again to verify that segments were recovered.");
+        }
+    }
+
     private void runRecovery(int containerCount, Storage storage, Map<Integer, String> backUpMetadataSegments) throws Exception {
         // Create the environment for DebugSegmentContainer.
         @Cleanup
@@ -682,6 +737,9 @@ public class RestoreBackUpDataRecoveryTest extends ThreadPooledTestSuite {
 
         // Update core attributes from the backUp Metadata segments
         ContainerRecoveryUtils.updateCoreAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService(), TIMEOUT);
+
+        // match old and new attributes
+        assertTrue(ContainerRecoveryUtils.matchAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService(), TIMEOUT));
 
         // Waits for metadata segments to be flushed to Long Term Storage and then stops the debug segment containers
         stopDebugSegmentContainersPostFlush(containerCount, debugStreamSegmentContainerMap);
@@ -985,11 +1043,11 @@ public class RestoreBackUpDataRecoveryTest extends ThreadPooledTestSuite {
     }
 
     // Writes the required number of events to the given stream without using transactions.
-    private void writeEvents(String streamName, ClientFactoryImpl clientFactory) {
+    private void writeEvents(String streamName, ClientFactoryImpl clientFactory, int numEvents) {
         EventStreamWriter<String> writer = clientFactory.createEventWriter(streamName,
                 new UTF8StringSerializer(),
                 EventWriterConfig.builder().build());
-        for (int i = 0; i < TOTAL_NUM_EVENTS;) {
+        for (int i = 0; i < numEvents;) {
             writer.writeEvent("", EVENT).join();
             i++;
         }
@@ -998,14 +1056,14 @@ public class RestoreBackUpDataRecoveryTest extends ThreadPooledTestSuite {
     }
 
     // Writes the required number of events to the given stream with using transactions.
-    private void writeTransactionalEvents(String streamName, ClientFactoryImpl clientFactory) throws TxnFailedException {
+    private void writeTransactionalEvents(String streamName, ClientFactoryImpl clientFactory, int numEvents) throws TxnFailedException {
         EventWriterConfig writerConfig = EventWriterConfig.builder().transactionTimeoutTime(TRANSACTION_TIMEOUT.toMillis()).build();
         @Cleanup
         TransactionalEventStreamWriter<String> txnWriter = clientFactory.createTransactionalEventWriter(streamName, new UTF8StringSerializer(),
                 writerConfig);
 
         Transaction<String> transaction = txnWriter.beginTxn();
-        for (int i = 0; i < TOTAL_NUM_EVENTS; i++) {
+        for (int i = 0; i < numEvents; i++) {
             transaction.writeEvent("0", EVENT);
         }
         transaction.flush();
