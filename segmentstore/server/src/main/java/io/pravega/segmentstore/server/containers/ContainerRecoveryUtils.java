@@ -380,8 +380,8 @@ public class ContainerRecoveryUtils {
         val args = IteratorArgs.builder().fetchTimeout(timeout).build();
         SegmentToContainerMapper segToConMapper = new SegmentToContainerMapper(containersMap.size());
 
-        AtomicBoolean flag = new AtomicBoolean(true);
-
+        Map<String, Map<UUID, Long>> attributesOld = new HashMap<>();
+        Map<String, Map<UUID, Long>> attributesNew = new HashMap<>();
         // Iterate through all back up metadata segments
         for (val backUpMetadataSegmentEntry : backUpMetadataSegments.entrySet()) {
             // Get the name of original metadata segment
@@ -395,9 +395,6 @@ public class ContainerRecoveryUtils {
                     backUpMetadataSegment));
             log.info("Back up container metadata segment name: {} and its container id: {}", backUpMetadataSegment,
                     containerForBackUpMetadataSegment.getId());
-
-            // Get the container for segments inside back up metadata segment
-            val container = containersMap.get(backUpMetadataSegmentEntry.getKey());
 
             // Get the iterator to iterate through all segments in the back up metadata segment
             val tableExtension = containerForBackUpMetadataSegment.getExtension(ContainerTableExtension.class);
@@ -423,27 +420,52 @@ public class ContainerRecoveryUtils {
 
                     Map<UUID, Long> expectedAttributes = new HashMap<>();
                     applyAttributes(originalAttributes, expectedAttributes);
-                    log.info("Segment Name: {} Original Attributes: {}", properties.getName(), expectedAttributes);
 
-                    val newAttributes = Futures.exceptionallyExpecting(
-                            container.getAttributes(properties.getName(), expectedAttributes.keySet(),
-                                    true, timeout),
-                            ex -> ex instanceof StreamSegmentNotExistsException, null).join();
-
-                    log.info("Segment Name: {} New Attributes: {}", properties.getName(), newAttributes);
-
-                    if (newAttributes == null) {
-                        continue;
-                    }
-
-                    if (!expectedAttributes.equals(newAttributes)) {
-                        flag.set(false);
-                        break;
-                    }
+                    attributesOld.put(properties.getName(), expectedAttributes);
                 }
             }, executorService).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         }
-        return flag.get();
+        for (val containerEntry : containersMap.entrySet()) {
+            // Get the name of original metadata segment
+            val metadataSegment = NameUtils.getMetadataSegmentName(containerEntry.getKey());
+
+            log.info("container metadata segment name: {} ", metadataSegment);
+
+            // Get the iterator to iterate through all segments in the back up metadata segment
+            val tableExtension = containerEntry.getValue().getExtension(ContainerTableExtension.class);
+            val entryIterator = tableExtension.entryIterator(metadataSegment, args)
+                    .get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+
+            // Iterating through all segments in the back up metadata segment
+            entryIterator.forEachRemaining(item -> {
+                for (val entry : item.getEntries()) {
+                    val segmentInfo = MetadataStore.SegmentInfo.deserialize(entry.getValue());
+                    val properties = segmentInfo.getProperties();
+
+                    // skip, if this is original metadata segment
+                    if (properties.getName().equals(metadataSegment) || backUpMetadataSegments.containsValue(properties.getName())) {
+                        continue;
+                    }
+
+                    // Get the attributes for the current segment
+                    List<AttributeUpdate> newAttributes = properties.getAttributes().entrySet().stream()
+                            .map(e -> new AttributeUpdate(e.getKey(), AttributeUpdateType.Replace, e.getValue()))
+                            .collect(Collectors.toList());
+
+                    Map<UUID, Long> receivedAttributes = new HashMap<>();
+                    applyAttributes(newAttributes, receivedAttributes);
+
+                    attributesNew.put(properties.getName(), receivedAttributes);
+                }
+            }, executorService).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        }
+        for (val newAttributesEntry : attributesNew.entrySet()) {
+
+            if (!newAttributesEntry.getValue().equals(attributesOld.get(newAttributesEntry.getKey()))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static void applyAttributes(Collection<AttributeUpdate> updates, Map<UUID, Long> target) {

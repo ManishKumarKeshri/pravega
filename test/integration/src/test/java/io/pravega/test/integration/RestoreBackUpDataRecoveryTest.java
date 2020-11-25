@@ -738,6 +738,10 @@ public class RestoreBackUpDataRecoveryTest extends ThreadPooledTestSuite {
         // Update core attributes from the backUp Metadata segments
         ContainerRecoveryUtils.updateCoreAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService(), TIMEOUT);
 
+        for (int containerId = 0; containerId < containerCount; containerId++) {
+            debugStreamSegmentContainerMap.get(containerId).flushToStorage(TIMEOUT).join();
+        }
+
         // match old and new attributes
         assertTrue(ContainerRecoveryUtils.matchAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService(), TIMEOUT));
 
