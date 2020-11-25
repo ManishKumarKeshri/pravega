@@ -44,6 +44,7 @@ import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperLogFactory;
 import io.pravega.segmentstore.storage.mocks.InMemoryDurableDataLogFactory;
 import io.pravega.segmentstore.storage.mocks.InMemoryStorageFactory;
 import lombok.Cleanup;
+import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 
 import java.time.Duration;
@@ -59,6 +60,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * Loads the storage instance, recovers all segments from there.
  */
+@Slf4j
 public class Tier1RecoveryCommand extends DataRecoveryCommand {
     private static final int CONTAINER_EPOCH = 1;
     private static final Duration TIMEOUT = Duration.ofMillis(100 * 1000);
@@ -158,12 +160,12 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         output(Level.INFO, "All segments recovered.");
 
         // Update core attributes from the backUp Metadata segments
-//        output(Level.INFO, "Updating core attributes for segments registered.");
-//        ContainerRecoveryUtils.updateCoreAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService,
-//                TIMEOUT);
+        output(Level.INFO, "Updating core attributes for segments registered.");
+        ContainerRecoveryUtils.updateCoreAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService,
+                TIMEOUT);
 
         // match old and new attributes
-        // assertTrue(ContainerRecoveryUtils.matchAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService, TIMEOUT));
+        assertTrue(ContainerRecoveryUtils.matchAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService, TIMEOUT));
 
         // Waits for metadata segments to be flushed to LTS and then stops the debug segment containers
         stopDebugSegmentContainersPostFlush(debugStreamSegmentContainerMap);

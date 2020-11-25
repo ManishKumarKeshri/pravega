@@ -17,6 +17,7 @@ import io.pravega.segmentstore.storage.StorageFactory;
 import io.pravega.shared.NameUtils;
 import io.pravega.shared.segment.SegmentToContainerMapper;
 import lombok.Cleanup;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -29,6 +30,7 @@ import java.util.logging.Level;
 /**
  * Lists all non-shadow segments from there from the storage. The storage is loaded using the config properties.
  */
+@Slf4j
 public class StorageListSegmentsCommand extends DataRecoveryCommand {
     /**
      * Header line for writing segments' details to csv files.
