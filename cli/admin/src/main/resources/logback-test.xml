@@ -17,4 +17,14 @@
     <root level="DEBUG">
         <appender-ref ref="FILE" />
     </root>
+
+    <!-- This config is valid for all unit tests in this module. We are turning off all logging for unit tests -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>%msg%n</pattern>
+        </encoder>
+    </appender>
+    <root level="DEBUG">
+        <appender-ref ref="CONSOLE"/>
+    </root>
 </configuration>
