@@ -158,9 +158,9 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         output(Level.INFO, "All segments recovered.");
 
         // Update core attributes from the backUp Metadata segments
-        output(Level.INFO, "Updating core attributes for segments registered.");
-        ContainerRecoveryUtils.updateCoreAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService,
-                TIMEOUT);
+//        output(Level.INFO, "Updating core attributes for segments registered.");
+//        ContainerRecoveryUtils.updateCoreAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService,
+//                TIMEOUT);
 
         // match old and new attributes
         assertTrue(ContainerRecoveryUtils.matchAttributes(backUpMetadataSegments, debugStreamSegmentContainerMap, executorService, TIMEOUT));
