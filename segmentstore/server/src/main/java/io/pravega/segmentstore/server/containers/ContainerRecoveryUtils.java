@@ -426,7 +426,7 @@ public class ContainerRecoveryUtils {
             }, executorService).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         }
         for (val containerEntry : containersMap.entrySet()) {
-            // Get the name of original metadata segment
+            // Get the name of new metadata segment
             val metadataSegment = NameUtils.getMetadataSegmentName(containerEntry.getKey());
 
             log.info("container metadata segment name: {} ", metadataSegment);
@@ -436,13 +436,13 @@ public class ContainerRecoveryUtils {
             val entryIterator = tableExtension.entryIterator(metadataSegment, args)
                     .get(timeout.toMillis(), TimeUnit.MILLISECONDS);
 
-            // Iterating through all segments in the back up metadata segment
+            // Iterating through all segments in the new metadata segment
             entryIterator.forEachRemaining(item -> {
                 for (val entry : item.getEntries()) {
                     val segmentInfo = MetadataStore.SegmentInfo.deserialize(entry.getValue());
                     val properties = segmentInfo.getProperties();
 
-                    // skip, if this is original metadata segment
+                    // skip, if this is metadata segment or a back up metadata segment
                     if (properties.getName().equals(metadataSegment) || backUpMetadataSegments.containsValue(properties.getName())) {
                         continue;
                     }
