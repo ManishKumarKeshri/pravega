@@ -9,7 +9,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 -->
 <configuration scan="true" scanPeriod="30 seconds">
-    <logger name="org.apache.zookeeper" level="WARN"/>
+    <logger name="org.apache.zookeeper" level="DEBUG"/>
 
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
         <file>adminCli.log</file>
@@ -26,20 +26,20 @@ You may obtain a copy of the License at
         </encoder>
     </appender>
 
-    <logger name="io.pravega.local" level="INFO">
+    <logger name="io.pravega.local" level="DEBUG">
         <appender-ref ref="STDOUT"/>
     </logger>
-    <logger name="io.pravega.controller.server.ControllerServiceMain" level="INFO">
+    <logger name="io.pravega.controller.server.ControllerServiceMain" level="DEBUG">
         <appender-ref ref="STDOUT"/>
     </logger>
-    <logger name="io.pravega.segmentstore.server.host.ServiceStarter" level="INFO">
+    <logger name="io.pravega.segmentstore.server.host.ServiceStarter" level="DEBUG">
         <appender-ref ref="STDOUT"/>
     </logger>
-    <logger name="io.pravega.segmentstore.storage.impl.bookkeeper.ZooKeeperServiceRunner" level="INFO">
+    <logger name="io.pravega.segmentstore.storage.impl.bookkeeper.ZooKeeperServiceRunner" level="DEBUG">
         <appender-ref ref="STDOUT"/>
     </logger>
 
-    <root level="${log.level:-INFO}">
+    <root level="${log.level:-DEBUG}">
         <appender-ref ref="FILE"/>
     </root>
 </configuration>

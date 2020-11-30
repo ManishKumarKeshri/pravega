@@ -113,12 +113,15 @@ public abstract class DataRecoveryCommand extends AdminCommand {
         if (INFO.equals(level)) {
             System.out.println(String.format(messageTemplate, args));
             logger.log(INFO, String.format(messageTemplate, args));
+            log.info(String.format(messageTemplate, args));
         } else if (FINE.equals(level)) {
             System.out.println(String.format(messageTemplate, args));
             logger.log(FINE, String.format(messageTemplate, args));
+            log.debug(String.format(messageTemplate, args));
         } else if (SEVERE.equals(level)) {
             System.err.println(String.format(messageTemplate, args));
             logger.log(SEVERE, String.format(messageTemplate, args));
+            log.error(String.format(messageTemplate, args));
         }
     }
 
