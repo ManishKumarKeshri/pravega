@@ -726,6 +726,13 @@ project('cli:admin') {
     applicationName = "pravega-admin"
     mainClassName = "io.pravega.cli.admin.AdminCLIRunner"
 
+    applicationDefaultJvmArgs = ["-server", "-Xmx4g", "-XX:+HeapDumpOnOutOfMemoryError",
+                                 "-Dlogback.configurationFile=PRAVEGA_APP_HOME/conf/admin-cli-logback.xml",
+                                 "-Dlog.dir=PRAVEGA_APP_HOME/logs",
+                                 "-Dlog.name=adminCli",
+                                 "-Xdebug",
+                                 "-Xrunjdwp:server=y,transport=dt_socket,suspend=n"]
+
     startScripts {
         classpath += files('$APP_HOME/pluginlib')
         doLast {

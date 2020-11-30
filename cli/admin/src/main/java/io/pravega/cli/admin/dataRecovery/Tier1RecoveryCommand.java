@@ -68,7 +68,7 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
     private final ScheduledExecutorService executorService = ExecutorServiceHelpers.newScheduledThreadPool(100, "recoveryProcessor");
     private final int containerCount;
     private final StorageFactory storageFactory;
-    private final BookKeeperLogFactory dataLogFactory;
+    private BookKeeperLogFactory dataLogFactory;
 
     private static final DurableLogConfig NO_TRUNCATIONS_DURABLE_LOG_CONFIG = DurableLogConfig
             .builder()
@@ -114,22 +114,6 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         super(args);
         this.containerCount = getServiceConfig().getContainerCount();
         this.storageFactory = createStorageFactory(executorService);
-
-        val config = getCommandArgs().getState().getConfigBuilder().build().getConfig(ContainerConfig::builder);
-
-        // Start a zk client and create a bookKeeperLogFactory
-        val bkConfig = getCommandArgs().getState().getConfigBuilder()
-                .include(BookKeeperConfig.builder().with(BookKeeperConfig.ZK_ADDRESS, getServiceConfig().getZkURL()))
-                .build().getConfig(BookKeeperConfig::builder);
-
-        val zkClient = createZKClient();
-        this.dataLogFactory = new BookKeeperLogFactory(bkConfig, zkClient, executorService);
-        try {
-            this.dataLogFactory.initialize();
-        } catch (DurableDataLogException ex) {
-            zkClient.close();
-            ex.printStackTrace();
-        }
     }
 
 
@@ -138,6 +122,22 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         // set up logging
         setLogging(descriptor().getName());
         output(Level.INFO, "Container Count = %d", this.containerCount);
+
+        // Start a zk client and create a bookKeeperLogFactory
+        val bkConfig = getCommandArgs().getState().getConfigBuilder()
+                .include(BookKeeperConfig.builder().with(BookKeeperConfig.ZK_ADDRESS, getServiceConfig().getZkURL()))
+                .build().getConfig(BookKeeperConfig::builder);
+
+        @Cleanup
+        val zkClient = createZKClient();
+        this.dataLogFactory = new BookKeeperLogFactory(bkConfig, zkClient, executorService);
+        try {
+            this.dataLogFactory.initialize();
+        } catch (DurableDataLogException ex) {
+            zkClient.close();
+            ex.printStackTrace();
+        }
+        output(Level.INFO, "Started ZK Client at %s.", getServiceConfig().getZkURL());
 
         this.storage = this.storageFactory.createStorageAdapter();
         storage.initialize(CONTAINER_EPOCH);
@@ -242,7 +242,6 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
 
 
     public static class Context implements AutoCloseable {
-        public final StorageFactory storageFactory;
         public final DurableDataLogFactory dataLogFactory;
         public final ReadIndexFactory readIndexFactory;
         public final AttributeIndexFactory attributeIndexFactory;
@@ -251,7 +250,6 @@ public class Tier1RecoveryCommand extends DataRecoveryCommand {
         public final CacheManager cacheManager;
 
         Context(ScheduledExecutorService scheduledExecutorService) {
-            this.storageFactory = new InMemoryStorageFactory(scheduledExecutorService);
             this.dataLogFactory = new InMemoryDurableDataLogFactory(MAX_DATA_LOG_APPEND_SIZE, scheduledExecutorService);
             this.cacheStorage = new DirectMemoryCache(Integer.MAX_VALUE / 5);
             this.cacheManager = new CacheManager(CachePolicy.INFINITE, this.cacheStorage, scheduledExecutorService);
