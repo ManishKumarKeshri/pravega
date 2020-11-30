@@ -22,7 +22,7 @@ You may obtain a copy of the License at
 
     <logger name="io.pravega.cli.admin.dataRecovery" level="DEBUG">
         <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-            <file>pravega-local.log</file>
+            <file>dataRecovery.log</file>
             <encoder>
                 <charset>UTF-8</charset>
                 <Pattern>%d %-4relative [%thread] %-5level %logger{35} - %msg%n</Pattern>
@@ -40,19 +40,9 @@ You may obtain a copy of the License at
         </appender>
     </logger>
 
-    <logger name="io.pravega.cli.admin.dataRecovery" level="DEBUG">
-        <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-            <file>dataRecovery.log</file>
-            <encoder>
-                <charset>UTF-8</charset>
-                <Pattern>%d %-4relative [%thread] %-5level %logger{35} - %msg%n</Pattern>
-            </encoder>
-        </appender>
-    </logger>
-
     <logger name="org.apache.curator.framework" level="DEBUG">
         <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-            <file>ZooKeeperS.log</file>
+            <file>ZooKeeper.log</file>
             <encoder>
                 <charset>UTF-8</charset>
                 <Pattern>%d %-4relative [%thread] %-5level %logger{35} - %msg%n</Pattern>
