@@ -9,7 +9,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 -->
 <configuration scan="true" scanPeriod="30 seconds">
-    <logger name="org.apache.zookeeper" level="WARN"/>
+    <logger name="org.apache.zookeeper" level="DEBUG"/>
 
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>

@@ -730,7 +730,6 @@ project('cli:admin') {
                                  "-Dlogback.configurationFile=PRAVEGA_APP_HOME/conf/admin-cli-logback.xml",
                                  "-Dlog.dir=PRAVEGA_APP_HOME/logs",
                                  "-Dlog.name=adminCli",
-                                 "-Xdebug",
                                  "-Xrunjdwp:server=y,transport=dt_socket,suspend=n"]
 
     startScripts {
