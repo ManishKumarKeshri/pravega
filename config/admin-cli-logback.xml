@@ -10,14 +10,13 @@ You may obtain a copy of the License at
 -->
 <configuration scan="true" scanPeriod="30 seconds">
     <logger name="org.apache.zookeeper" level="DEBUG">
-
-    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-        <file>zk.log</file>
-        <encoder>
-            <charset>UTF-8</charset>
-            <Pattern>%d %-4relative [%thread] %-5level %logger{35} - %msg%n</Pattern>
-        </encoder>
-    </appender>
+        <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+            <file>zk.log</file>
+            <encoder>
+                <charset>UTF-8</charset>
+                <Pattern>%d %-4relative [%thread] %-5level %logger{35} - %msg%n</Pattern>
+            </encoder>
+        </appender>
    </logger>
 
     <logger name="io.pravega.cli.admin.dataRecovery" level="DEBUG">

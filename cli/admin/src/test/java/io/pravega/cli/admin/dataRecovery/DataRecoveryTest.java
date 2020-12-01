@@ -82,8 +82,8 @@ import java.util.concurrent.atomic.AtomicReference;
 public class DataRecoveryTest {
     private static final Duration TIMEOUT = Duration.ofMillis(30 * 1000);
     private static final int NUM_EVENTS = 10;
-    private static final String EVENT = "12345";
-    private static final String SCOPE = "testScope";
+    private static final String EVENT = "hello world";
+    private static final String SCOPE = "examples";
     // Setup utility.
     private static final Duration READ_TIMEOUT = Duration.ofMillis(1000);
     private static final AtomicReference<AdminCommandState> STATE = new AtomicReference<>();
@@ -145,7 +145,7 @@ public class DataRecoveryTest {
         int containerCount = 1;
         @Cleanup
         PravegaRunner pravegaRunner = new PravegaRunner(instanceId++, bookieCount, containerCount, this.storageFactory);
-        String streamName = "testDataRecoveryCommand";
+        String streamName = "helloStream";
 
         createScopeStream(pravegaRunner.controllerRunner.controller, SCOPE, streamName);
         try (val clientRunner = new ClientRunner(pravegaRunner.controllerRunner)) {
@@ -261,7 +261,7 @@ public class DataRecoveryTest {
                 new UTF8StringSerializer(),
                 EventWriterConfig.builder().build());
         for (int i = 0; i < NUM_EVENTS;) {
-            writer.writeEvent("", EVENT).join();
+            writer.writeEvent("helloRoutingKey", EVENT + i).join();
             i++;
         }
         writer.flush();
@@ -284,7 +284,7 @@ public class DataRecoveryTest {
 
         for (int q = 0; q < NUM_EVENTS;) {
             String eventRead = reader.readNextEvent(READ_TIMEOUT.toMillis()).getEvent();
-            Assert.assertEquals("Event written and read back don't match", EVENT, eventRead);
+            Assert.assertEquals("Event written and read back don't match", EVENT + q, eventRead);
             q++;
         }
         reader.close();
