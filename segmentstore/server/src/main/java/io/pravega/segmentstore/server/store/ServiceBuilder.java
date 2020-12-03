@@ -80,7 +80,6 @@ public class ServiceBuilder implements AutoCloseable {
     private final AtomicReference<ReadIndexFactory> readIndexFactory;
     private final AtomicReference<AttributeIndexFactory> attributeIndexFactory;
     private final AtomicReference<DurableDataLogFactory> dataLogFactory;
-    private final AtomicReference<StorageFactory> storageFactory;
     private final AtomicReference<SegmentContainerFactory> containerFactory;
     private final AtomicReference<SegmentContainerRegistry> containerRegistry;
     private final AtomicReference<SegmentContainerManager> containerManager;
@@ -91,6 +90,7 @@ public class ServiceBuilder implements AutoCloseable {
     private Function<ComponentSetup, StorageFactory> storageFactoryCreator;
     private Function<ComponentSetup, SegmentContainerManager> segmentContainerManagerCreator;
     private Function<ComponentSetup, StreamSegmentStore> streamSegmentStoreCreator;
+    public final AtomicReference<StorageFactory> storageFactory;
 
     //endregion
 

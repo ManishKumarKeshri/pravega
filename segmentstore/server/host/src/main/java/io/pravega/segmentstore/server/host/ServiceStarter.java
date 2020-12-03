@@ -17,6 +17,7 @@ import io.pravega.common.security.ZKTLSUtils;
 import io.pravega.common.cluster.Host;
 import io.pravega.segmentstore.contracts.StreamSegmentStore;
 import io.pravega.segmentstore.contracts.tables.TableStore;
+import io.pravega.segmentstore.server.containers.ContainerRecoveryUtils;
 import io.pravega.segmentstore.server.host.delegationtoken.TokenVerifierImpl;
 import io.pravega.segmentstore.server.host.handler.PravegaConnectionListener;
 import io.pravega.segmentstore.server.host.stat.AutoScaleMonitor;
@@ -30,6 +31,8 @@ import io.pravega.segmentstore.storage.mocks.InMemoryDurableDataLogFactory;
 import io.pravega.shared.metrics.MetricsConfig;
 import io.pravega.shared.metrics.MetricsProvider;
 import io.pravega.shared.metrics.StatsProvider;
+
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.curator.framework.CuratorFramework;
@@ -121,6 +124,9 @@ public final class ServiceStarter {
                                                       this.serviceConfig.isReplyWithStackTraceOnError(), serviceBuilder.getLowPriorityExecutor());
 
         this.listener.startListening();
+        Thread flusher = new Thread(new ContainerRecoveryUtils.Flusher(serviceConfig.getContainerCount(), this.serviceBuilder.storageFactory.get().createStorageAdapter(),
+                this.serviceBuilder));
+        flusher.start();
         log.info("PravegaConnectionListener started successfully.");
         log.info("StreamSegmentService started.");
     }

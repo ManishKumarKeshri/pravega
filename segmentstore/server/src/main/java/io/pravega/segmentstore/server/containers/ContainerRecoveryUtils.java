@@ -14,13 +14,16 @@ import io.pravega.common.Exceptions;
 import io.pravega.common.concurrent.Futures;
 import io.pravega.segmentstore.contracts.AttributeUpdate;
 import io.pravega.segmentstore.contracts.AttributeUpdateType;
+import io.pravega.segmentstore.contracts.ContainerNotFoundException;
 import io.pravega.segmentstore.contracts.SegmentProperties;
 import io.pravega.segmentstore.contracts.StreamSegmentNotExistsException;
 import io.pravega.segmentstore.contracts.tables.IteratorArgs;
+import io.pravega.segmentstore.server.store.ServiceBuilder;
 import io.pravega.segmentstore.server.tables.ContainerTableExtension;
 import io.pravega.segmentstore.storage.Storage;
 import io.pravega.shared.NameUtils;
 import io.pravega.shared.segment.SegmentToContainerMapper;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 
@@ -46,6 +49,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static io.pravega.shared.NameUtils.getMetadataSegmentName;
+import static java.lang.Thread.sleep;
 
 /**
  * Utility methods for container recovery.
@@ -402,6 +406,66 @@ public class ContainerRecoveryUtils {
                     }, executor);
                 }, executor);
             }, executor);
+    }
+
+    public static class Flusher implements Runnable {
+        private final int containerCount;
+        private final Storage storage;
+        private final Duration timeout;
+        private final ServiceBuilder serviceBuilder;
+        private final ServiceBuilder.ComponentSetup componentSetup;
+
+        public Flusher(int containerCount, Storage storage, ServiceBuilder serviceBuilder) {
+            this.containerCount = containerCount;
+            this.storage = storage;
+            this.timeout = Duration.ofMinutes(2);
+            this.serviceBuilder = serviceBuilder;
+            this.componentSetup = new ServiceBuilder.ComponentSetup(serviceBuilder);
+        }
+
+        private boolean existsAll(Storage storage, int containerCount, Duration timeout) {
+            for (int containerId = 0; containerId < containerCount; containerId++) {
+                String metadataSegment = NameUtils.getMetadataSegmentName(containerId);
+                if (storage.exists(metadataSegment, timeout).join()) {
+                    log.info("{} exists in the storage.", metadataSegment);
+                    continue;
+                } else {
+                    log.info("{} doesn't exist. So returning", metadataSegment);
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private void FlushAll(int containerCount, Duration timeout) throws ContainerNotFoundException {
+            for (int containerId = 0; containerId < containerCount; containerId++) {
+                componentSetup.getContainerRegistry().getContainer(containerId).flushToStorage(timeout).join();
+            }
+        }
+
+        @SneakyThrows
+        @Override
+        public void run() {
+            while (true) {
+                log.info("Checking again.");
+                if (existsAll(storage, containerCount, timeout)) {
+                    for (int i = 0; i < 300; i++) {
+                        log.info("Sleeping for 5 minutes before flushing everything to storage.");
+                        sleep(1000);
+                    }
+                    for (int i = 0; i < 60; i++) {
+                        log.info("Shut down the controller now.");
+                        sleep(1000);
+                    }
+                    FlushAll(containerCount, timeout);
+                    log.info("Flushed to the storage!!!");
+                    break;
+                } else {
+                    log.info("Metadata files still doesn't exist in storage. So sleeping...");
+                    sleep(20000);
+                }
+            }
+        }
     }
 
     /**
