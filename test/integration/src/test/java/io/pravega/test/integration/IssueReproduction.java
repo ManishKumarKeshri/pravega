@@ -63,7 +63,7 @@ import static org.junit.Assert.assertTrue;
 @Slf4j
 public class IssueReproduction {
     private static final ArrayList<String> STREAM_NAMES = new ArrayList<>(Arrays.asList("testStream1", "testStream2", "testStream3"));
-    private static final int NUM_STREAM = 1;
+    private static final int NUM_STREAM = 3;
     private static final int NUM_WRITERS_PER_STREAM = 3;
     private static final int NUM_READERS_PER_STREAM = 1;
     private static final Random RANDOM = new Random(1234);
@@ -77,7 +77,7 @@ public class IssueReproduction {
     private Controller controller = null;
     private ScheduledExecutorService writerPool;
     private ScheduledExecutorService readerPool;
-    private byte[] writeData = populate(8);
+    private byte[] writeData;
     @Before
     public void setup() throws Exception {
 
@@ -106,7 +106,7 @@ public class IssueReproduction {
         this.writerPool = ExecutorServiceHelpers.newScheduledThreadPool(NUM_WRITERS_PER_STREAM * NUM_STREAM, "WriterPool");
         this.readerPool = ExecutorServiceHelpers.newScheduledThreadPool(NUM_READERS_PER_STREAM * NUM_STREAM, "ReaderPool");
 
-        this.writeData = populate(8);
+        this.writeData = populate(600);
     }
 
     @After
@@ -149,7 +149,7 @@ public class IssueReproduction {
 
         String scope = "testScope";
         ArrayList<String> readerGroupNames = new ArrayList<>(Arrays.asList("testReaderGroup1", "testReaderGroup2", "testReaderGroup3"));
-        //20  readers -> 20 stream segments ( to have max read parallelism)
+        // 1 segment fixed
         ScalingPolicy scalingPolicy = ScalingPolicy.fixed(1);
         StreamConfiguration config = StreamConfiguration.builder().scalingPolicy(scalingPolicy).build();
 
@@ -235,6 +235,7 @@ public class IssueReproduction {
         log.info("All writers have stopped. Setting Stop_Read_Flag. Event Written Count:{}, Event Read " +
                 "Count: {}", eventData.get(), eventReadCount.get());
         assertEquals(eventData.get(), eventReadCount.get());
+
         //seal the stream
         for (int i = 0; i < NUM_STREAM; i++) {
             String stream = STREAM_NAMES.get(i);
@@ -312,7 +313,6 @@ public class IssueReproduction {
                     readerGroupName,
                     new JavaSerializer<byte[]>(),
                     ReaderConfig.builder().build());
-            //while (!(exitFlag.get() && readCount.get() == writeCount.get())) {
             while (true) {
                 final byte[] longEvent = reader.readNextEvent(SECONDS.toMillis(100)).getEvent();
                 if (longEvent != null) {
