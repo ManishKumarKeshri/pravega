@@ -63,7 +63,7 @@ import static org.junit.Assert.assertTrue;
 @Slf4j
 public class IssueReproduction {
     private static final ArrayList<String> STREAM_NAMES = new ArrayList<>(Arrays.asList("testStream1", "testStream2", "testStream3"));
-    private static final int NUM_STREAM = 3;
+    private static final int NUM_STREAM = 1;
     private static final int NUM_WRITERS_PER_STREAM = 3;
     private static final int NUM_READERS_PER_STREAM = 1;
     private static final Random RANDOM = new Random(1234);
@@ -234,7 +234,7 @@ public class IssueReproduction {
 
         log.info("All writers have stopped. Setting Stop_Read_Flag. Event Written Count:{}, Event Read " +
                 "Count: {}", eventData.get(), eventReadCount.get());
-        assertEquals(eventData.get(), eventReadCount.get());
+        assertEquals(13333 * NUM_WRITERS_PER_STREAM * NUM_STREAM, eventReadCount.get());
 
         //seal the stream
         for (int i = 0; i < NUM_STREAM; i++) {
@@ -287,7 +287,7 @@ public class IssueReproduction {
     private CompletableFuture<Void> write(final AtomicLong data, EventStreamWriter<byte[]> writer, long num_events) {
         return CompletableFuture.runAsync(() -> {
             for (int i = 0; i < num_events; i++) {
-                data.incrementAndGet();
+                // data.incrementAndGet();
                 writer.writeEvent("fixed", writeData);
                 writer.flush();
             }
