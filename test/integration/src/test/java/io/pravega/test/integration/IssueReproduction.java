@@ -66,7 +66,7 @@ public class IssueReproduction {
     private static final int NUM_STREAM = 1;
     private static final int NUM_WRITERS_PER_STREAM = 3;
     private static final int NUM_READERS_PER_STREAM = 1;
-    private static final Random RANDOM = new Random(1234);
+    private static final Random RANDOM = new Random(567);
     private AtomicLong eventReadCount;
     private AtomicBoolean stopReadFlag;
     private AtomicLong eventData;
@@ -78,6 +78,8 @@ public class IssueReproduction {
     private ScheduledExecutorService writerPool;
     private ScheduledExecutorService readerPool;
     private byte[] writeData;
+    private String endString;
+
     @Before
     public void setup() throws Exception {
 
@@ -144,7 +146,7 @@ public class IssueReproduction {
         }
     }
 
-    @Test(timeout = 600000)
+    @Test(timeout = 300000)
     public void readWriteTest() throws InterruptedException, ExecutionException {
 
         String scope = "testScope";
@@ -153,8 +155,8 @@ public class IssueReproduction {
         ScalingPolicy scalingPolicy = ScalingPolicy.fixed(1);
         StreamConfiguration config = StreamConfiguration.builder().scalingPolicy(scalingPolicy).build();
 
-        eventData = new AtomicLong();
-        eventReadCount = new AtomicLong(); // used by readers to maintain a count of events.
+        eventData = new AtomicLong(0);
+        eventReadCount = new AtomicLong(0); // used by readers to maintain a count of events.
         stopReadFlag = new AtomicBoolean(false);
         ClientConfig clientConfig = ClientConfig.builder().build();
         try (ConnectionPool cp = new ConnectionPoolImpl(clientConfig, new SocketConnectionFactoryImpl(clientConfig));
@@ -182,7 +184,7 @@ public class IssueReproduction {
             val eventBatch1 = writeEventsBatch(10000, writersMap);
 
             Futures.allOf(eventBatch1).get();
-            sleep(120000);
+            sleep(180000);
 
             //write second batch of events
             val eventBatch2 = writeEventsBatch(3333, writersMap);
@@ -202,8 +204,7 @@ public class IssueReproduction {
             for (int i = 0; i < NUM_STREAM; i++) {
                 log.info("Creating Reader group : {}", readerGroupNames.get(i));
 
-                readerGroupManager.createReaderGroup(readerGroupNames.get(i), ReaderGroupConfig.builder().disableAutomaticCheckpoints()
-                        .stream(Stream.of(scope, STREAM_NAMES.get(i))).build());
+                readerGroupManager.createReaderGroup(readerGroupNames.get(i), ReaderGroupConfig.builder().stream(Stream.of(scope, STREAM_NAMES.get(i))).build());
                 log.info("Reader group name {} ", readerGroupManager.getReaderGroup(readerGroupNames.get(i)).getGroupName());
                 log.info("Reader group scope {}", readerGroupManager.getReaderGroup(readerGroupNames.get(i)).getScope());
             }
@@ -313,13 +314,13 @@ public class IssueReproduction {
                     readerGroupName,
                     new JavaSerializer<byte[]>(),
                     ReaderConfig.builder().build());
-            while (true) {
+            while (readCount.get() < 13333 * NUM_WRITERS_PER_STREAM * NUM_STREAM) {
                 final byte[] longEvent = reader.readNextEvent(SECONDS.toMillis(100)).getEvent();
                 if (longEvent != null) {
                     //update if event read is not null.
                     readCount.incrementAndGet();
                 } else {
-                    break;
+                    continue;
                 }
             }
             log.info("Closing reader {}", reader);
