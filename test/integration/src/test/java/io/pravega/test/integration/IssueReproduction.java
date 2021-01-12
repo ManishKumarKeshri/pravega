@@ -82,7 +82,6 @@ public class IssueReproduction {
     private ScheduledExecutorService writerPool;
     private ScheduledExecutorService readerPool;
     private byte[] writeData;
-    private byte[] lastData;
 
     @Before
     public void setup() throws Exception {
@@ -303,7 +302,6 @@ public class IssueReproduction {
                 writer.writeEvent("fixed", writeData);
                 writer.flush();
             }
-            lastData = writeData;
             log.info("Closing writer {}", writer);
         }, writerPool);
     }
@@ -333,11 +331,8 @@ public class IssueReproduction {
                     log.info("Data read: {}", byteEvent);
                     //update if event read is not null.
                     readCount.incrementAndGet();
-                    if (Arrays.equals(byteEvent, lastData)) {
-                        break;
-                    }
                 } else {
-                    continue;
+                    break;
                 }
             }
             log.info("Closing reader {}", reader);
