@@ -65,8 +65,7 @@ public class IssueReproduction {
     private static final int NUM_WRITERS_PER_STREAM = 3;
     private static final int NUM_READERS_PER_STREAM = 1;
     private static final int NUM_EVENTS_PER_BATCH = 10000;
-    private static final int EVENT_SIZE = 600;
-    private static final int NUM_TRIES = 3;
+    private static final int NUM_TRIES = 5;
     private static final Random RANDOM = new Random(567);
     private AtomicLong eventReadCount;
     private AtomicLong eventData;
@@ -77,7 +76,7 @@ public class IssueReproduction {
     private Controller controller = null;
     private ScheduledExecutorService writerPool;
     private ScheduledExecutorService readerPool;
-    private byte[] writeData;
+    private long sleepTime = 300000;
 
     @Before
     public void setup() throws Exception {
@@ -152,8 +151,7 @@ public class IssueReproduction {
         ScalingPolicy scalingPolicy = ScalingPolicy.fixed(1);
         StreamConfiguration config = StreamConfiguration.builder().scalingPolicy(scalingPolicy).build();
 
-        eventData = new AtomicLong(0);
-        eventReadCount = new AtomicLong(0); // used by readers to maintain a count of events.
+
         ClientConfig clientConfig = ClientConfig.builder().build();
         try (ConnectionPool cp = new ConnectionPoolImpl(clientConfig, new SocketConnectionFactoryImpl(clientConfig));
              StreamManager streamManager = new StreamManagerImpl(controller, cp)) {
@@ -185,12 +183,15 @@ public class IssueReproduction {
                 log.info("Reader group scope {}", readerGroupManager.getReaderGroup(readerGroupNames.get(i)).getScope());
             }
 
+            eventData = new AtomicLong(0);
+            eventReadCount = new AtomicLong(0); // used by readers to maintain a count of events.
             // write first batch of events
             for (int j = 0; j < NUM_TRIES; j++) {
+
                 val eventBatch1 = writeEventsBatch(NUM_EVENTS_PER_BATCH, writersMap);
 
                 Futures.allOf(eventBatch1).get();
-                sleep(300000);
+                sleep(sleepTime);
 
                 // Events are written in the order
                 // batch 1 - batch2 - wait
@@ -202,6 +203,7 @@ public class IssueReproduction {
 
                 Futures.allOf(eventBatch2).get();
 
+                log.warn("writeCount {}", eventData.get());
                 //create readers
                 log.info("Creating readers");
                 List<CompletableFuture<Void>> readerList = new ArrayList<>();
@@ -210,17 +212,17 @@ public class IssueReproduction {
                     log.info("Starting reader for stream {}", STREAM_NAMES.get(i));
                     String readerName = "reader" + RandomFactory.create().nextInt(Integer.MAX_VALUE);
                     readerList.add(startNewReader(readerName + i + j, clientFactory, readerGroupNames.get(i),
-                            2 * NUM_EVENTS_PER_BATCH * (j + 1) * NUM_WRITERS_PER_STREAM * NUM_STREAMS, eventReadCount));
+                            eventData.get(), eventReadCount));
                 }
 
                 //wait for readers completion
                 Futures.allOf(readerList).get();
 
-                log.info("All writers have stopped. Setting Stop_Read_Flag. Event Written Count:{}, Event Read " +
+                log.warn("All writers have stopped. Setting Stop_Read_Flag. Event Written Count:{}, Event Read " +
                         "Count: {}", eventData.get(), eventReadCount.get());
-                assertEquals(2 * NUM_EVENTS_PER_BATCH * (j + 1) * NUM_WRITERS_PER_STREAM * NUM_STREAMS, eventReadCount.get());
+                assertEquals(eventData.get(), eventReadCount.get());
 
-                sleep(300000);
+                sleep(sleepTime);
             }
 
             ExecutorServiceHelpers.shutdown(writerPool);
@@ -259,7 +261,7 @@ public class IssueReproduction {
         log.info("Read write test succeeds");
     }
 
-    private List<CompletableFuture<Void>> writeEventsBatch(long num_events, Map<String, List<EventStreamWriter<byte[]>>> writersMap) {
+    private List<CompletableFuture<Void>> writeEventsBatch(long num_events, Map<String, List<EventStreamWriter<String>>> writersMap) {
         List<CompletableFuture<Void>> writerList = new ArrayList<>();
         for (int i = 0; i < NUM_STREAMS; i++) {
             String streamName = STREAM_NAMES.get(i);
@@ -271,15 +273,15 @@ public class IssueReproduction {
         return writerList;
     }
 
-    private Map<String, List<EventStreamWriter<byte[]>>> createWritersByStream(final EventStreamClientFactory clientFactory) {
-        Map<String, List<EventStreamWriter<byte[]>>> writersMap = new HashMap<>();
+    private Map<String, List<EventStreamWriter<String>>> createWritersByStream(final EventStreamClientFactory clientFactory) {
+        Map<String, List<EventStreamWriter<String>>> writersMap = new HashMap<>();
         for (int i = 0; i < NUM_STREAMS; i++) {
             String streamName = STREAM_NAMES.get(i);
             log.info("Creating {} writers for stream {}", NUM_WRITERS_PER_STREAM, streamName);
             for (int j = 0; j < NUM_WRITERS_PER_STREAM; j++) {
                 log.info("Starting writer{}", j);
-                EventStreamWriter<byte[]> writer = clientFactory.createEventWriter(streamName,
-                        new JavaSerializer<byte[]>(), EventWriterConfig.builder().build());
+                EventStreamWriter<String> writer = clientFactory.createEventWriter(streamName,
+                        new JavaSerializer<String>(), EventWriterConfig.builder().build());
                 if (writersMap.get(streamName) == null) {
                     writersMap.put(streamName, new ArrayList<>());
                 }
@@ -289,13 +291,13 @@ public class IssueReproduction {
         return writersMap;
     }
 
-    private CompletableFuture<Void> write(final AtomicLong data, EventStreamWriter<byte[]> writer, long num_events) {
+    private CompletableFuture<Void> write(final AtomicLong data, EventStreamWriter<String> writer, long num_events) {
         return CompletableFuture.runAsync(() -> {
             for (int i = 0; i < num_events; i++) {
-                writeData = populate(EVENT_SIZE);
-                data.incrementAndGet();
-                writer.writeEvent("fixed", writeData);
-                writer.flush();
+                synchronized (this) {
+                    writer.writeEvent("fixed", "Data" + data.incrementAndGet());
+                    writer.flush();
+                }
             }
             log.info("Closing writer {}", writer);
         }, writerPool);
@@ -312,19 +314,23 @@ public class IssueReproduction {
     }
 
     private CompletableFuture<Void> startNewReader(final String id, final EventStreamClientFactory clientFactory, final String
-            readerGroupName, int writeCount, final AtomicLong readCount) {
+            readerGroupName, long writeCount, final AtomicLong readCount) {
         return CompletableFuture.runAsync(() -> {
             @Cleanup
-            final EventStreamReader<byte[]> reader = clientFactory.createReader(id,
+            final EventStreamReader<String> reader = clientFactory.createReader(id,
                     readerGroupName,
-                    new JavaSerializer<byte[]>(),
+                    new JavaSerializer<String>(),
                     ReaderConfig.builder().build());
-            byte[] byteEvent;
-            while(readCount.get() < writeCount) {
-                byteEvent = reader.readNextEvent(SECONDS.toMillis(100)).getEvent();
-                if (byteEvent != null) {
+            String stringEvent;
+            while (true) {
+                stringEvent = reader.readNextEvent(SECONDS.toMillis(100)).getEvent();
+                if (stringEvent != null) {
                     //update if event read is not null.
+                    log.warn("Read event: {}", stringEvent);
                     readCount.incrementAndGet();
+                    if (stringEvent.equals("Data" + writeCount)) {
+                        break;
+                    }
                 }
             }
             log.info("Closing reader {}", reader);
