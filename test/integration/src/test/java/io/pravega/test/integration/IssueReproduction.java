@@ -1,6 +1,5 @@
 package io.pravega.test.integration;
 
-import com.sun.jersey.core.util.LazyVal;
 import io.pravega.client.ClientConfig;
 import io.pravega.client.EventStreamClientFactory;
 import io.pravega.client.admin.ReaderGroupManager;
@@ -47,12 +46,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static java.lang.Thread.sleep;
@@ -68,9 +64,9 @@ public class IssueReproduction {
     private static final int NUM_STREAMS = 1;
     private static final int NUM_WRITERS_PER_STREAM = 3;
     private static final int NUM_READERS_PER_STREAM = 1;
-    private static final int NUM_EVENTS_PER_BATCH = 5;
+    private static final int NUM_EVENTS_PER_BATCH = 10000;
     private static final int EVENT_SIZE = 600;
-    private static final int NUM_TRIES = 2;
+    private static final int NUM_TRIES = 3;
     private static final Random RANDOM = new Random(567);
     private AtomicLong eventReadCount;
     private AtomicLong eventData;
@@ -194,7 +190,7 @@ public class IssueReproduction {
                 val eventBatch1 = writeEventsBatch(NUM_EVENTS_PER_BATCH, writersMap);
 
                 Futures.allOf(eventBatch1).get();
-                sleep(3000);
+                sleep(300000);
 
                 // Events are written in the order
                 // batch 1 - batch2 - wait
@@ -224,7 +220,7 @@ public class IssueReproduction {
                         "Count: {}", eventData.get(), eventReadCount.get());
                 assertEquals(2 * NUM_EVENTS_PER_BATCH * (j + 1) * NUM_WRITERS_PER_STREAM * NUM_STREAMS, eventReadCount.get());
 
-                sleep(3000);
+                sleep(300000);
             }
 
             ExecutorServiceHelpers.shutdown(writerPool);
@@ -297,8 +293,7 @@ public class IssueReproduction {
         return CompletableFuture.runAsync(() -> {
             for (int i = 0; i < num_events; i++) {
                 writeData = populate(EVENT_SIZE);
-                log.info("Data written: {}", writeData);
-                // data.incrementAndGet();
+                data.incrementAndGet();
                 writer.writeEvent("fixed", writeData);
                 writer.flush();
             }
@@ -325,14 +320,11 @@ public class IssueReproduction {
                     new JavaSerializer<byte[]>(),
                     ReaderConfig.builder().build());
             byte[] byteEvent;
-            while(true) {
+            while(readCount.get() < writeCount) {
                 byteEvent = reader.readNextEvent(SECONDS.toMillis(100)).getEvent();
                 if (byteEvent != null) {
-                    log.info("Data read: {}", byteEvent);
                     //update if event read is not null.
                     readCount.incrementAndGet();
-                } else {
-                    break;
                 }
             }
             log.info("Closing reader {}", reader);
