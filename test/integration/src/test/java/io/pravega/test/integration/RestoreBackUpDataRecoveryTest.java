@@ -147,7 +147,7 @@ public class RestoreBackUpDataRecoveryTest extends ThreadPooledTestSuite {
     private static final ContainerConfig CONTAINER_CONFIG = ContainerConfig
             .builder()
             .with(ContainerConfig.SEGMENT_METADATA_EXPIRATION_SECONDS, (int) DEFAULT_CONFIG.getSegmentMetadataExpiration().getSeconds())
-            .with(ContainerConfig.MAX_ACTIVE_SEGMENT_COUNT, 100)
+            .with(ContainerConfig.MAX_ACTIVE_SEGMENT_COUNT, 1000)
             .build();
 
     // DL config that can be used to simulate no DurableLog truncations.
@@ -578,7 +578,7 @@ public class RestoreBackUpDataRecoveryTest extends ThreadPooledTestSuite {
      *  10. Starts segment store and controller.
      *  11. Let the reader read rest of the 10-N number of events.
      * @throws Exception    In case of an exception occurred while execution.
-    */
+     */
     @Test(timeout = 180000)
     public void testDurableDataLogFailRecoveryReadersPaused() throws Exception {
         int instanceId = 0;
@@ -703,7 +703,7 @@ public class RestoreBackUpDataRecoveryTest extends ThreadPooledTestSuite {
      *  8. Starts segment store and controller.
      *  9. Read all events and verify that all events are below the bounds.
      * @throws Exception    In case of an exception occurred while execution.
-    */
+     */
     @Test(timeout = 180000)
     public void testDurableDataLogFailRecoveryWatermarking() throws Exception {
         int instanceId = 0;
@@ -887,7 +887,7 @@ public class RestoreBackUpDataRecoveryTest extends ThreadPooledTestSuite {
      * Adds water marks to the watermarks queue.
      */
     private CompletableFuture<Void> fetchWatermarks(RevisionedStreamClient<Watermark> watermarkReader, LinkedBlockingQueue<Watermark> watermarks,
-                                 AtomicBoolean stop) {
+                                                    AtomicBoolean stop) {
         AtomicReference<Revision> revision = new AtomicReference<>(watermarkReader.fetchOldestRevision());
         return Futures.loop(() -> !stop.get(), () -> Futures.delayedTask(() -> {
             if (stop.get()) {

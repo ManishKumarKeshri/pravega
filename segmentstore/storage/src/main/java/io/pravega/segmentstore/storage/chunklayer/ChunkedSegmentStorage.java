@@ -311,6 +311,7 @@ public class ChunkedSegmentStorage implements Storage {
     public CompletableFuture<SegmentHandle> create(String streamSegmentName, SegmentRollingPolicy rollingPolicy, Duration timeout) {
         checkInitialized();
         return executeSerialized(() -> {
+            log.info("In chunkedSegmentStorage creating segment {}", streamSegmentName);
             val traceId = LoggerHelpers.traceEnter(log, "create", streamSegmentName, rollingPolicy);
             val timer = new Timer();
 
@@ -471,6 +472,7 @@ public class ChunkedSegmentStorage implements Storage {
     public CompletableFuture<Void> delete(SegmentHandle handle, Duration timeout) {
         checkInitialized();
         return executeSerialized(() -> {
+            log.info("ChunkedSegmentStorage delete {}", handle.getSegmentName());
             val traceId = LoggerHelpers.traceEnter(log, "delete", handle);
             val timer = new Timer();
 

@@ -16,6 +16,8 @@
         </encoder>
     </appender>
 
+    <logger name="io.pravega.segmentstore.server.containers" level="debug"/>
+
     <root level="INFO">
         <appender-ref ref="STDOUT"/>
     </root>

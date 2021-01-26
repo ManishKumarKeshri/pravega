@@ -36,10 +36,12 @@ import javax.annotation.concurrent.GuardedBy;
 
 import lombok.Data;
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * In-Memory mock for Storage. Contents is destroyed when object is garbage collected.
  */
+@Slf4j
 public class InMemoryStorage implements SyncStorage {
     //region Members
 
@@ -93,6 +95,7 @@ public class InMemoryStorage implements SyncStorage {
     @Override
     public SegmentHandle create(String streamSegmentName) throws StreamSegmentException {
         ensurePreconditions();
+        log.info("In InMemoryStorage creating segment {}", streamSegmentName);
         synchronized (this.lock) {
             if (this.streamSegments.containsKey(streamSegmentName)) {
                 throw new StreamSegmentExistsException(streamSegmentName);
@@ -173,7 +176,7 @@ public class InMemoryStorage implements SyncStorage {
     @Override
     public void delete(SegmentHandle handle) throws StreamSegmentNotExistsException {
         ensurePreconditions();
-
+        log.info("Delete Segment called in InMemory Storage for '{}'", handle.getSegmentName());
         // If we are given a read-only handle, we must ensure the segment is sealed. If the segment can accept modifications
         // (it is not sealed), then we require a read-write handle.
         boolean canDelete = !handle.isReadOnly();
