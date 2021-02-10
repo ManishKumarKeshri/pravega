@@ -80,6 +80,7 @@ public class LargeEventTest extends AbstractReadWriteTest {
      */
     @Test
     public void largeEventSimpleTest() {
+        System.exit(0);
         Service conService = Utils.createPravegaControllerService(null);
         List<URI> ctlURIs = conService.getServiceDetails();
         URI controllerUri = ctlURIs.get(0);

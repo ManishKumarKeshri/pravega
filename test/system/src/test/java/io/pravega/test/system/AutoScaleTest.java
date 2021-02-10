@@ -120,6 +120,7 @@ public class AutoScaleTest extends AbstractScaleTests {
 
     @Test
     public void scaleTests() {
+        System.exit(0);
         testState = new TestState(false);
         CompletableFuture<Void> scaleup = scaleUpTest();
         CompletableFuture<Void> scaleDown = scaleDownTest();

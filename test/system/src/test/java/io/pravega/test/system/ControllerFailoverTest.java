@@ -101,6 +101,7 @@ public class ControllerFailoverTest extends AbstractSystemTest {
 
     @Test
     public void failoverTest() throws InterruptedException, ExecutionException {
+        System.exit(0);
         String scope = "testFailoverScope" + RandomStringUtils.randomAlphabetic(5);
         String stream = "testFailoverStream" + RandomStringUtils.randomAlphabetic(5);
         int initialSegments = 1;

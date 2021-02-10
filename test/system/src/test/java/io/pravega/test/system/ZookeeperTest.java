@@ -52,6 +52,7 @@ public class ZookeeperTest {
      */
     @Test
     public void zkTest() {
+        System.exit(0);
         log.info("Start execution of ZkTest");
         Service zk = Utils.createZookeeperService();
         URI zkUri = zk.getServiceDetails().get(0);

@@ -134,6 +134,7 @@ public class ReadWriteAndAutoScaleWithFailoverTest extends AbstractFailoverTests
 
     @Test
     public void readWriteAndAutoScaleWithFailoverTest() throws Exception {
+        System.exit(0);
         createWriters(clientFactory, INIT_NUM_WRITERS, scope, AUTO_SCALE_STREAM);
         createReaders(clientFactory, readerGroupName, scope, readerGroupManager, AUTO_SCALE_STREAM, NUM_READERS);
 

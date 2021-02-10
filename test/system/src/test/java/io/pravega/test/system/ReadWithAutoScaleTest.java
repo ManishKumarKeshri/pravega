@@ -101,6 +101,7 @@ public class ReadWithAutoScaleTest extends AbstractScaleTests {
 
     @Test
     public void scaleTestsWithReader() {
+        System.exit(0);
         URI controllerUri = getControllerURI();
         Controller controller = getController();
         testState = new TestState(true);

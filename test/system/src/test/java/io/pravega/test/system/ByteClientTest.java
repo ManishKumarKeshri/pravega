@@ -139,6 +139,7 @@ public class ByteClientTest extends AbstractSystemTest {
      */
     @Test
     public void byteClientTest() throws IOException {
+        System.exit(0);
         log.info("byteClientTest:: with security enabled: {}", Utils.AUTH_ENABLED);
         log.info("Invoking byteClientTest test with Controller URI: {}", controllerURI);
         @Cleanup
@@ -203,6 +204,7 @@ public class ByteClientTest extends AbstractSystemTest {
      */
     @Test
     public void byteClientTruncationTest() throws IOException {
+        System.exit(0);
         log.info("byteClientTruncationTest:: with security enabled: {}", Utils.AUTH_ENABLED);
 
         assertTrue("Creating stream", streamManager.createStream(SCOPE, STREAM_TRUNCATION, config));

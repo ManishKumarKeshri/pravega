@@ -145,6 +145,7 @@ public class BookieFailoverTest extends AbstractFailoverTests  {
 
     @Test
     public void bookieFailoverTest() throws ExecutionException, InterruptedException {
+        System.exit(0);
         createWriters(clientFactory, NUM_WRITERS, SCOPE, STREAM);
         createReaders(clientFactory, readerGroupName, SCOPE, readerGroupManager, STREAM, NUM_READERS);
 

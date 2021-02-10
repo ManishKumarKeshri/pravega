@@ -82,6 +82,7 @@ public class DynamicRestApiTest extends AbstractSystemTest {
 
     @Test
     public void listScopes() {
+        System.exit(0);
         Service controllerService = Utils.createPravegaControllerService(null);
         List<URI> controllerURIs = controllerService.getServiceDetails();
         URI controllerGRPCUri = controllerURIs.get(0);
