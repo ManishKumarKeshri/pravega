@@ -53,7 +53,7 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
     Service controllerInstance;
     Service segmentStoreInstance;
     URI controllerURIDirect = null;
-    URI controllerREST = null;
+    String controllerREST = null;
     Controller controller;
     ScheduledExecutorService controllerExecutorService;
     private static Client client;
