@@ -18,14 +18,24 @@ import io.pravega.client.stream.impl.StreamSegments;
 import io.pravega.common.Exceptions;
 import io.pravega.common.concurrent.Futures;
 import io.pravega.common.util.Retry;
+import io.pravega.test.common.TestUtils;
 import io.pravega.test.system.framework.services.Service;
 import java.net.URI;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import lombok.extern.slf4j.Slf4j;
 
+import javax.ws.rs.client.Client;
+import javax.ws.rs.client.Invocation;
+import javax.ws.rs.core.HttpHeaders;
+import javax.ws.rs.core.MultivaluedHashMap;
+import javax.ws.rs.core.MultivaluedMap;
+import javax.ws.rs.core.Response;
+
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.when;
 
 /**
  * This class provides useful methods for classes that aim at implementing system tests in which service instance
@@ -43,8 +53,31 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
     Service controllerInstance;
     Service segmentStoreInstance;
     URI controllerURIDirect = null;
+    URI controllerREST = null;
     Controller controller;
     ScheduledExecutorService controllerExecutorService;
+    private static Client client;
+
+    private Invocation.Builder invocationBuilder(String resourceUri, String username, String password) {
+        MultivaluedMap<String, Object> map = new MultivaluedHashMap<>();
+        map.addAll(HttpHeaders.AUTHORIZATION, TestUtils.basicAuthToken(username, password));
+        return client.target(resourceUri).request().headers(map);
+    }
+
+    private void pollingController() {
+        final String resourceURI = controllerREST + "/v1/scopes";
+        while (true) {
+            Invocation requestInvocation = this.invocationBuilder(resourceURI, "admin", "1111_aaaa")
+                    .buildGet();
+
+            Response response = requestInvocation.invoke();
+            if (response.getStatus() == 200) {
+                break;
+            }
+            response.close();
+            Exceptions.handleInterrupted(() -> Thread.sleep(5000));
+        }
+    }
 
     void performFailoverTest() throws ExecutionException {
         log.info("Test with 3 controller, segment store instances running and without a failover scenario");
@@ -81,7 +114,8 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
         //Scale down controller instances to 2
         Futures.getAndHandleExceptions(controllerInstance.scaleService(2), ExecutionException::new);
         //zookeeper will take about 30 seconds to detect that the node has gone down
-        Exceptions.handleInterrupted(() -> Thread.sleep(WAIT_AFTER_FAILOVER_MILLIS));
+        //Exceptions.handleInterrupted(() -> Thread.sleep(WAIT_AFTER_FAILOVER_MILLIS));
+        pollingController();
         log.info("Scaling down controller instances from 3 to 2");
 
         currentWriteCount2 = testState.getEventWrittenCount();
@@ -126,8 +160,9 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
 
         //Scale down controller instances to 2
         Futures.getAndHandleExceptions(controllerInstance.scaleService(2), ExecutionException::new);
+        pollingController();
         //zookeeper will take about 30 seconds to detect that the node has gone down
-        Exceptions.handleInterrupted(() -> Thread.sleep(WAIT_AFTER_FAILOVER_MILLIS));
+        //Exceptions.handleInterrupted(() -> Thread.sleep(WAIT_AFTER_FAILOVER_MILLIS));
         log.info("Scaling down controller instances from 3 to 2");
         log.info("Read count: {}, write count: {} after controller failover after sleep",
                 testState.getEventReadCount(), testState.getEventWrittenCount());

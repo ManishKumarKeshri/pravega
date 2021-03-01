@@ -39,6 +39,9 @@ abstract class AbstractSystemTest {
                 return uri.getPort() == Utils.DOCKER_CONTROLLER_PORT;
         }
     };
+    static final Predicate<URI> ISREST = uri -> {
+        return uri.getPort() == Utils.REST_PORT;
+    };
     static URI startZookeeperInstance() {
         Service zkService = Utils.createZookeeperService();
         if (!zkService.isRunning()) {
