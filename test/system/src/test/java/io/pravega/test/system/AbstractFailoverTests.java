@@ -66,10 +66,9 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
 
     private void pollingController() {
         final String resourceURI = controllerREST + "/v1/scopes";
+        Invocation requestInvocation = this.invocationBuilder(resourceURI, "admin", "1111_aaaa")
+                .buildGet();
         while (true) {
-            Invocation requestInvocation = this.invocationBuilder(resourceURI, "admin", "1111_aaaa")
-                    .buildGet();
-
             Response response = requestInvocation.invoke();
             if (response.getStatus() == 200) {
                 break;
