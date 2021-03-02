@@ -18,7 +18,6 @@ import io.pravega.client.stream.impl.StreamSegments;
 import io.pravega.common.Exceptions;
 import io.pravega.common.concurrent.Futures;
 import io.pravega.common.util.Retry;
-import io.pravega.test.common.TestUtils;
 import io.pravega.test.system.framework.Utils;
 import io.pravega.test.system.framework.services.Service;
 import java.net.URI;
@@ -60,7 +59,14 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
     ScheduledExecutorService controllerExecutorService;
     private static Client client;
 
-    private void pollingController() {
+    private void pollingController(Service controllerService) {
+        List<URI> controllerURIs = controllerService.getServiceDetails();
+        URI controllerRESTUri = controllerURIs.get(1);
+
+        String protocol = Utils.TLS_AND_AUTH_ENABLED ? "https://" : "http://";
+        String restServerURI = protocol + controllerRESTUri.getHost() + ":" + controllerRESTUri.getPort();
+        log.info("REST Server URI: {}", restServerURI);
+
         org.glassfish.jersey.client.ClientConfig clientConfig = new org.glassfish.jersey.client.ClientConfig();
         clientConfig.register(JacksonJsonProvider.class);
         clientConfig.property("sun.net.http.allowRestrictedHeaders", "true");
@@ -71,7 +77,7 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
         }
         client = ClientBuilder.newClient(clientConfig);
 
-        WebTarget webTarget = client.target(controllerREST).path("v1").path("scopes");
+        WebTarget webTarget = client.target(restServerURI).path("v1").path("scopes");
         Invocation.Builder builder = webTarget.request();
         Response response = builder.get();
         while (response.getStatus() != OK.getStatusCode()) {
@@ -117,7 +123,7 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
         Futures.getAndHandleExceptions(controllerInstance.scaleService(2), ExecutionException::new);
         //zookeeper will take about 30 seconds to detect that the node has gone down
         //Exceptions.handleInterrupted(() -> Thread.sleep(WAIT_AFTER_FAILOVER_MILLIS));
-        pollingController();
+        pollingController(controllerInstance);
         log.info("Scaling down controller instances from 3 to 2");
 
         currentWriteCount2 = testState.getEventWrittenCount();
@@ -162,7 +168,7 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
 
         //Scale down controller instances to 2
         Futures.getAndHandleExceptions(controllerInstance.scaleService(2), ExecutionException::new);
-        pollingController();
+        pollingController(controllerInstance);
         //zookeeper will take about 30 seconds to detect that the node has gone down
         //Exceptions.handleInterrupted(() -> Thread.sleep(WAIT_AFTER_FAILOVER_MILLIS));
         log.info("Scaling down controller instances from 3 to 2");
