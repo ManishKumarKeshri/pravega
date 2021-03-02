@@ -19,6 +19,7 @@ import io.pravega.common.Exceptions;
 import io.pravega.common.concurrent.Futures;
 import io.pravega.common.util.Retry;
 import io.pravega.test.common.TestUtils;
+import io.pravega.test.system.framework.Utils;
 import io.pravega.test.system.framework.services.Service;
 import java.net.URI;
 import java.util.List;
@@ -26,16 +27,17 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import lombok.extern.slf4j.Slf4j;
+import org.glassfish.jersey.client.authentication.HttpAuthenticationFeature;
+import org.glassfish.jersey.jackson.internal.jackson.jaxrs.json.JacksonJsonProvider;
 
 import javax.ws.rs.client.Client;
+import javax.ws.rs.client.ClientBuilder;
 import javax.ws.rs.client.Invocation;
-import javax.ws.rs.core.HttpHeaders;
-import javax.ws.rs.core.MultivaluedHashMap;
-import javax.ws.rs.core.MultivaluedMap;
+import javax.ws.rs.client.WebTarget;
 import javax.ws.rs.core.Response;
 
+import static javax.ws.rs.core.Response.Status.OK;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.when;
 
 /**
  * This class provides useful methods for classes that aim at implementing system tests in which service instance
@@ -58,24 +60,25 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
     ScheduledExecutorService controllerExecutorService;
     private static Client client;
 
-    private Invocation.Builder invocationBuilder(String resourceUri, String username, String password) {
-        MultivaluedMap<String, Object> map = new MultivaluedHashMap<>();
-        map.addAll(HttpHeaders.AUTHORIZATION, TestUtils.basicAuthToken(username, password));
-        return client.target(resourceUri).request().headers(map);
-    }
-
     private void pollingController() {
-        final String resourceURI = controllerREST + "/v1/scopes";
-        Invocation requestInvocation = this.invocationBuilder(resourceURI, "admin", "1111_aaaa")
-                .buildGet();
-        while (true) {
-            Response response = requestInvocation.invoke();
-            if (response.getStatus() == 200) {
-                break;
-            }
-            response.close();
+        org.glassfish.jersey.client.ClientConfig clientConfig = new org.glassfish.jersey.client.ClientConfig();
+        clientConfig.register(JacksonJsonProvider.class);
+        clientConfig.property("sun.net.http.allowRestrictedHeaders", "true");
+        if (Utils.AUTH_ENABLED) {
+            HttpAuthenticationFeature feature = HttpAuthenticationFeature.basic(Utils.PRAVEGA_PROPERTIES.get("pravega.client.auth.username"),
+                    Utils.PRAVEGA_PROPERTIES.get("pravega.client.auth.password"));
+            clientConfig.register(feature);
+        }
+        client = ClientBuilder.newClient(clientConfig);
+
+        WebTarget webTarget = client.target(controllerREST).path("v1").path("scopes");
+        Invocation.Builder builder = webTarget.request();
+        Response response = builder.get();
+        while (response.getStatus() != OK.getStatusCode()) {
+            response = builder.get();
             Exceptions.handleInterrupted(() -> Thread.sleep(5000));
         }
+        response.close();
     }
 
     void performFailoverTest() throws ExecutionException {
