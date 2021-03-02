@@ -81,8 +81,8 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
         Invocation.Builder builder = webTarget.request();
         Response response = builder.get();
         while (response.getStatus() != OK.getStatusCode()) {
-            response = builder.get();
             Exceptions.handleInterrupted(() -> Thread.sleep(5000));
+            response = builder.get();
         }
         response.close();
     }
