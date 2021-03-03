@@ -18,6 +18,7 @@ import io.pravega.client.stream.impl.StreamSegments;
 import io.pravega.common.Exceptions;
 import io.pravega.common.concurrent.Futures;
 import io.pravega.common.util.Retry;
+import io.pravega.test.common.AssertExtensions;
 import io.pravega.test.system.framework.services.Service;
 import java.net.URI;
 import java.util.concurrent.CompletableFuture;
@@ -46,51 +47,48 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
     Controller controller;
     ScheduledExecutorService controllerExecutorService;
 
-    void performFailoverTest() throws ExecutionException {
+    void performFailoverTest() throws Exception {
         log.info("Test with 3 controller, segment store instances running and without a failover scenario");
         long currentWriteCount1 = testState.getEventWrittenCount();
         long currentReadCount1 = testState.getEventReadCount();
         log.info("Read count: {}, write count: {} without any failover", currentReadCount1, currentWriteCount1);
 
-        //check reads and writes after sleeps
-        log.info("Sleeping for {} ", WAIT_AFTER_FAILOVER_MILLIS);
-        Exceptions.handleInterrupted(() -> Thread.sleep(WAIT_AFTER_FAILOVER_MILLIS));
-
-        long currentWriteCount2 = testState.getEventWrittenCount();
-        long currentReadCount2 = testState.getEventReadCount();
-        log.info("Read count: {}, write count: {} without any failover after sleep before scaling", currentReadCount2, currentWriteCount2);
         //ensure writes are happening
-        assertTrue(currentWriteCount2 > currentWriteCount1);
+        long finalCurrentWriteCount = currentWriteCount1;
+        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventWrittenCount() >= finalCurrentWriteCount, 100000);
         //ensure reads are happening
-        assertTrue(currentReadCount2 > currentReadCount1);
+        long finalCurrentReadCount = currentReadCount1;
+        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventReadCount() >= finalCurrentReadCount, 100000);
 
+        currentWriteCount1 = testState.getEventWrittenCount();
+        currentReadCount1 = testState.getEventReadCount();
         //Scale down segment store instances to 2
         Futures.getAndHandleExceptions(segmentStoreInstance.scaleService(2), ExecutionException::new);
         //zookeeper will take about 30 seconds to detect that the node has gone down
         Exceptions.handleInterrupted(() -> Thread.sleep(WAIT_AFTER_FAILOVER_MILLIS));
         log.info("Scaling down Segment Store instances from 3 to 2");
 
+        //ensure writes are happening
+        long finalCurrentWriteCount1 = currentWriteCount1;
+        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventWrittenCount() >= finalCurrentWriteCount1, 100000);
+        //ensure reads are happening
+        long finalCurrentReadCount1 = currentReadCount1;
+        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventReadCount() >= finalCurrentReadCount1, 100000);
+
         currentWriteCount1 = testState.getEventWrittenCount();
         currentReadCount1 = testState.getEventReadCount();
-        log.info("Read count: {}, write count: {} after Segment Store failover after sleep", currentReadCount1, currentWriteCount1);
-        //ensure writes are happening
-        assertTrue(currentWriteCount1 > currentWriteCount2);
-        //ensure reads are happening
-        assertTrue(currentReadCount1 > currentReadCount2);
-
         //Scale down controller instances to 2
         Futures.getAndHandleExceptions(controllerInstance.scaleService(2), ExecutionException::new);
         //zookeeper will take about 30 seconds to detect that the node has gone down
         Exceptions.handleInterrupted(() -> Thread.sleep(WAIT_AFTER_FAILOVER_MILLIS));
         log.info("Scaling down controller instances from 3 to 2");
 
-        currentWriteCount2 = testState.getEventWrittenCount();
-        currentReadCount2 = testState.getEventReadCount();
-        log.info("Read count: {}, write count: {} after controller failover after sleep", currentReadCount2, currentWriteCount2);
         //ensure writes are happening
-        assertTrue(currentWriteCount2 > currentWriteCount1);
+        long finalCurrentWriteCount2 = currentWriteCount1;
+        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventWrittenCount() >= finalCurrentWriteCount2, 100000);
         //ensure reads are happening
-        assertTrue(currentReadCount2 > currentReadCount1);
+        long finalCurrentReadCount2 = currentReadCount1;
+        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventReadCount() >= finalCurrentReadCount2, 100000);
 
         //Scale down segment  store, controller to 1 instance each.
         Futures.getAndHandleExceptions(segmentStoreInstance.scaleService(1), ExecutionException::new);
