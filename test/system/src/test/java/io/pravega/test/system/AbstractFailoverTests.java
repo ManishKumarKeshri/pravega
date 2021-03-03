@@ -55,10 +55,10 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
 
         //ensure writes are happening
         long finalCurrentWriteCount = currentWriteCount1;
-        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventWrittenCount() >= finalCurrentWriteCount, 100000);
+        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventWrittenCount() > finalCurrentWriteCount, 100000);
         //ensure reads are happening
         long finalCurrentReadCount = currentReadCount1;
-        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventReadCount() >= finalCurrentReadCount, 100000);
+        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventReadCount() > finalCurrentReadCount, 100000);
 
         currentWriteCount1 = testState.getEventWrittenCount();
         currentReadCount1 = testState.getEventReadCount();
@@ -70,10 +70,10 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
 
         //ensure writes are happening
         long finalCurrentWriteCount1 = currentWriteCount1;
-        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventWrittenCount() >= finalCurrentWriteCount1, 100000);
+        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventWrittenCount() > finalCurrentWriteCount1, 100000);
         //ensure reads are happening
         long finalCurrentReadCount1 = currentReadCount1;
-        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventReadCount() >= finalCurrentReadCount1, 100000);
+        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventReadCount() > finalCurrentReadCount1, 100000);
 
         currentWriteCount1 = testState.getEventWrittenCount();
         currentReadCount1 = testState.getEventReadCount();
@@ -85,10 +85,10 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
 
         //ensure writes are happening
         long finalCurrentWriteCount2 = currentWriteCount1;
-        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventWrittenCount() >= finalCurrentWriteCount2, 100000);
+        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventWrittenCount() > finalCurrentWriteCount2, 100000);
         //ensure reads are happening
         long finalCurrentReadCount2 = currentReadCount1;
-        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventReadCount() >= finalCurrentReadCount2, 100000);
+        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventReadCount() > finalCurrentReadCount2, 100000);
 
         //Scale down segment  store, controller to 1 instance each.
         Futures.getAndHandleExceptions(segmentStoreInstance.scaleService(1), ExecutionException::new);

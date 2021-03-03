@@ -674,7 +674,7 @@ public class K8sClient {
                                     } else {
                                         return podStatus.getContainerStatuses()
                                                 .stream()
-                                                .allMatch(st -> st.getReady() == true);
+                                                .allMatch(st -> st.getReady().equals(true));
                                     }
                                 }).count()),
                 runCount -> { // Number of pods which are running
