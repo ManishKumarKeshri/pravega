@@ -35,10 +35,10 @@ import java.util.stream.Collectors;
 @RunWith(SystemTestRunner.class)
 public class MetadataScalabilityLargeScalesTest extends MetadataScalabilityTest {
     private static final String STREAM_NAME = "metadataScalabilityScale";
-    private static final int NUM_SEGMENTS = 10;
+    private static final int NUM_SEGMENTS = 1;
     private static final StreamConfiguration CONFIG = StreamConfiguration.builder()
                                                                          .scalingPolicy(ScalingPolicy.fixed(NUM_SEGMENTS)).build();
-    private static final int SCALES_TO_PERFORM = 1010;
+    private static final int SCALES_TO_PERFORM = 1001;
     
     private final Map<Double, Double> newRanges = new HashMap<>();
     
