@@ -23,6 +23,7 @@ import io.pravega.common.Exceptions;
 import io.pravega.common.concurrent.ExecutorServiceHelpers;
 import io.pravega.common.concurrent.Futures;
 import io.pravega.common.hash.RandomFactory;
+import io.pravega.test.common.AssertExtensions;
 import io.pravega.test.system.framework.Environment;
 import io.pravega.test.system.framework.SystemTestRunner;
 import io.pravega.test.system.framework.Utils;
@@ -144,12 +145,17 @@ public class BookieFailoverTest extends AbstractFailoverTests  {
     }
 
     @Test
-    public void bookieFailoverTest() throws ExecutionException, InterruptedException {
+    public void bookieFailoverTest() throws Exception {
         createWriters(clientFactory, NUM_WRITERS, SCOPE, STREAM);
         createReaders(clientFactory, readerGroupName, SCOPE, readerGroupManager, STREAM, NUM_READERS);
 
-        // Give some time to create readers before forcing a bookie failover.
-        Exceptions.handleInterrupted(() -> Thread.sleep(BOOKIE_FAILOVER_WAIT_MILLIS));
+        long currentWriteCount1 = testState.getEventWrittenCount();
+        long currentReadCount1 = testState.getEventReadCount();
+
+        //ensure writes are happening
+        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventWrittenCount() >= currentWriteCount1, 100000);
+        //ensure reads are happening
+        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventReadCount() >= currentReadCount1, 100000);
 
         // Scale down bookie.
         Futures.getAndHandleExceptions(bookkeeperService.scaleService(2), ExecutionException::new);
@@ -174,11 +180,15 @@ public class BookieFailoverTest extends AbstractFailoverTests  {
         log.info("Writes failed when bookie is scaled down.");
 
         // Bring up a new bookie instance.
+        long currentWriteCount2 = testState.getEventWrittenCount();
+        long currentReadCount2 = testState.getEventReadCount();
         Futures.getAndHandleExceptions(bookkeeperService.scaleService(3), ExecutionException::new);
 
         // Give some more time to writers to write more events.
-        Exceptions.handleInterrupted(() -> Thread.sleep(BOOKIE_FAILOVER_WAIT_MILLIS));
-        stopWriters();
+        //ensure writes are happening
+        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventWrittenCount() >= currentWriteCount2, 100000);
+        //ensure reads are happening
+        AssertExtensions.assertEventuallyEquals(true, () -> testState.getEventReadCount() >= currentReadCount2, 100000);        stopWriters();
 
         // Also, verify writes happened after bookie is brought back.
         long finalWriteCount = testState.getEventWrittenCount();
