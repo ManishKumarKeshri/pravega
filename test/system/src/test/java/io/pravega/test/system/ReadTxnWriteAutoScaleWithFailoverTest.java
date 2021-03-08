@@ -57,7 +57,8 @@ public class ReadTxnWriteAutoScaleWithFailoverTest extends AbstractFailoverTests
     private final String scope = "testReadTxnWriteAutoScaleScope" + RandomFactory.create().nextInt(Integer.MAX_VALUE);
     private final String stream = "testReadTxnWriteAutoScaleStream";
     private final String readerGroupName = "testReadTxnWriteAutoScaleReaderGroup" + RandomFactory.create().nextInt(Integer.MAX_VALUE);
-    private final ScalingPolicy scalingPolicy = ScalingPolicy.byEventRate(1, 2, 2);
+    private final int numSegments = Integer.parseInt(Utils.PRAVEGA_PROPERTIES.get("pravegaservice.container.count"));
+    private final ScalingPolicy scalingPolicy = ScalingPolicy.byEventRate(1, 2, 2 * numSegments);
     private final StreamConfiguration config = StreamConfiguration.builder().scalingPolicy(scalingPolicy).build();
     private ClientFactoryImpl clientFactory;
     private ReaderGroupManager readerGroupManager;

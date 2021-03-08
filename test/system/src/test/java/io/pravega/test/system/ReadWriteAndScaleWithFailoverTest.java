@@ -60,7 +60,8 @@ public class ReadWriteAndScaleWithFailoverTest extends AbstractFailoverTests {
 
     private final String scope = "testReadWriteAndScaleScope" + RandomFactory.create().nextInt(Integer.MAX_VALUE);
     private final String readerGroupName = "testReadWriteAndScaleReaderGroup" + RandomFactory.create().nextInt(Integer.MAX_VALUE);
-    private final ScalingPolicy scalingPolicy = ScalingPolicy.fixed(1); // auto scaling is not enabled.
+    private final int numSegments = Integer.parseInt(Utils.PRAVEGA_PROPERTIES.get("pravegaservice.container.count"));
+    private final ScalingPolicy scalingPolicy = ScalingPolicy.fixed(2 * numSegments); // auto scaling is not enabled.
     private final StreamConfiguration config = StreamConfiguration.builder().scalingPolicy(scalingPolicy).build();
     private ClientFactoryImpl clientFactory;
     private ReaderGroupManager readerGroupManager;

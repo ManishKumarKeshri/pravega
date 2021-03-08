@@ -53,8 +53,9 @@ public class ReadWithAutoScaleTest extends AbstractScaleTests {
     private final static String STREAM_NAME = "testTxnScaleUpWithRead";
     private final static String READER_GROUP_NAME = "testReaderGroup" + RandomFactory.create().nextInt(Integer.MAX_VALUE);
 
-    //Initial number of segments is 2.
-    private static final ScalingPolicy SCALING_POLICY = ScalingPolicy.byEventRate(1, 2, 2);
+    //Initial number of segments is 2 * NUM_SEGMENTS.
+    private static final int NUM_SEGMENTS = Integer.parseInt(Utils.PRAVEGA_PROPERTIES.get("pravegaservice.container.count"));
+    private static final ScalingPolicy SCALING_POLICY = ScalingPolicy.byEventRate(1, 2, 2 * NUM_SEGMENTS);
     private static final StreamConfiguration CONFIG = StreamConfiguration.builder().scalingPolicy(SCALING_POLICY).build();
 
     @Rule
