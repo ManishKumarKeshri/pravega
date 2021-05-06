@@ -823,6 +823,36 @@ public final class WireCommands {
         }
     }
 
+    @Data
+    public static final class FlushToStorage implements Request, WireCommand {
+        final WireCommandType type = WireCommandType.FLUSH_TO_STORAGE;
+        @ToString.Exclude
+        final String delegationToken;
+        final long requestId;
+
+        @Override
+        public void process(RequestProcessor cp) {
+            cp.flushToStorage(this);
+        }
+
+        @Override
+        public void writeFields(DataOutput out) throws IOException {
+            out.writeUTF(delegationToken == null ? "" : delegationToken);
+            out.writeLong(requestId);
+        }
+
+        public static WireCommand flushToStorage(ByteBufInputStream in, int i) throws IOException {
+            String delegationToken = in.readUTF();
+            long requestId = in.available()  >= Long.BYTES ? in.readLong() : -1L;
+            return new FlushToStorage(delegationToken, requestId);
+        }
+
+        @Override
+        public long getRequestId() {
+            return requestId;
+        }
+    }
+
     @RequiredArgsConstructor
     @Getter
     @ToString

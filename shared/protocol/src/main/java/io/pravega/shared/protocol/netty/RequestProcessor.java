@@ -46,6 +46,8 @@ public interface RequestProcessor {
     void append(Append append);
 
     void readSegment(ReadSegment readSegment);
+
+    void flushToStorage(WireCommands.FlushToStorage flushToStorage);
     
     void updateSegmentAttribute(UpdateSegmentAttribute updateSegmentAttribute);
     
