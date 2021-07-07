@@ -24,13 +24,24 @@ import io.pravega.client.stream.impl.StreamSegments;
 import io.pravega.common.Exceptions;
 import io.pravega.common.concurrent.Futures;
 import io.pravega.common.util.Retry;
+import io.pravega.test.system.framework.Utils;
 import io.pravega.test.system.framework.services.Service;
 import java.net.URI;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import lombok.extern.slf4j.Slf4j;
+import org.glassfish.jersey.client.authentication.HttpAuthenticationFeature;
+import org.glassfish.jersey.jackson.internal.jackson.jaxrs.json.JacksonJsonProvider;
 
+import javax.ws.rs.client.Client;
+import javax.ws.rs.client.ClientBuilder;
+import javax.ws.rs.client.Invocation;
+import javax.ws.rs.client.WebTarget;
+import javax.ws.rs.core.Response;
+
+import static javax.ws.rs.core.Response.Status.OK;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -49,8 +60,38 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
     Service controllerInstance;
     Service segmentStoreInstance;
     URI controllerURIDirect = null;
+    String controllerREST = null;
     Controller controller;
     ScheduledExecutorService controllerExecutorService;
+    private static Client client;
+
+    private void pollingController(Service controllerService) {
+        List<URI> controllerURIs = controllerService.getServiceDetails();
+        URI controllerRESTUri = controllerURIs.get(1);
+
+        String protocol = Utils.TLS_AND_AUTH_ENABLED ? "https://" : "http://";
+        String restServerURI = protocol + controllerRESTUri.getHost() + ":" + controllerRESTUri.getPort();
+        log.info("REST Server URI: {}", restServerURI);
+
+        org.glassfish.jersey.client.ClientConfig clientConfig = new org.glassfish.jersey.client.ClientConfig();
+        clientConfig.register(JacksonJsonProvider.class);
+        clientConfig.property("sun.net.http.allowRestrictedHeaders", "true");
+        if (Utils.AUTH_ENABLED) {
+            HttpAuthenticationFeature feature = HttpAuthenticationFeature.basic(Utils.PRAVEGA_PROPERTIES.get("pravega.client.auth.username"),
+                    Utils.PRAVEGA_PROPERTIES.get("pravega.client.auth.password"));
+            clientConfig.register(feature);
+        }
+        client = ClientBuilder.newClient(clientConfig);
+
+        WebTarget webTarget = client.target(restServerURI).path("v1").path("scopes");
+        Invocation.Builder builder = webTarget.request();
+        Response response = builder.get();
+        while (response.getStatus() != OK.getStatusCode()) {
+            Exceptions.handleInterrupted(() -> Thread.sleep(5000));
+            response = builder.get();
+        }
+        response.close();
+    }
 
     void performFailoverTest() throws ExecutionException {
         log.info("Test with 3 controller, segment store instances running and without a failover scenario");
@@ -87,7 +128,8 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
         //Scale down controller instances to 2
         Futures.getAndHandleExceptions(controllerInstance.scaleService(2), ExecutionException::new);
         //zookeeper will take about 30 seconds to detect that the node has gone down
-        Exceptions.handleInterrupted(() -> Thread.sleep(WAIT_AFTER_FAILOVER_MILLIS));
+        //Exceptions.handleInterrupted(() -> Thread.sleep(WAIT_AFTER_FAILOVER_MILLIS));
+        pollingController(controllerInstance);
         log.info("Scaling down controller instances from 3 to 2");
 
         currentWriteCount2 = testState.getEventWrittenCount();
@@ -132,8 +174,9 @@ abstract class AbstractFailoverTests extends AbstractReadWriteTest {
 
         //Scale down controller instances to 2
         Futures.getAndHandleExceptions(controllerInstance.scaleService(2), ExecutionException::new);
+        pollingController(controllerInstance);
         //zookeeper will take about 30 seconds to detect that the node has gone down
-        Exceptions.handleInterrupted(() -> Thread.sleep(WAIT_AFTER_FAILOVER_MILLIS));
+        //Exceptions.handleInterrupted(() -> Thread.sleep(WAIT_AFTER_FAILOVER_MILLIS));
         log.info("Scaling down controller instances from 3 to 2");
         log.info("Read count: {}, write count: {} after controller failover after sleep",
                 testState.getEventReadCount(), testState.getEventWrittenCount());

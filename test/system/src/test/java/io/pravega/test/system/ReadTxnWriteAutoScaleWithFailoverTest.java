@@ -98,6 +98,9 @@ public class ReadTxnWriteAutoScaleWithFailoverTest extends AbstractFailoverTests
         controllerURIDirect = URI.create((Utils.TLS_AND_AUTH_ENABLED ? TLS : TCP) + String.join(",", uris));
         log.info("Controller Service direct URI: {}", controllerURIDirect);
 
+        controllerREST = conURIs.stream().filter(ISREST).map(URI::getAuthority)
+                .collect(Collectors.toList()).get(0);
+
         // Verify segment store is running.
         segmentStoreInstance = Utils.createPravegaSegmentStoreService(zkUri, controllerURIDirect);
         assertTrue(segmentStoreInstance.isRunning());
